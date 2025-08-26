@@ -26,9 +26,7 @@ log.disabled = True
 
 # 默認配置
 DEFAULT_USER_AGENT = "%E5%9B%9B%E5%AD%A3%E7%B7%9A%E4%B8%8A/4 CFNetwork/3826.500.131 Darwin/24.5.0"
-DEFAULT_TIMEOUT = 15  # 增加超時時間
-CACHE_FILE = os.path.expanduser('~/.4gtvcache.txt')
-CACHE_TTL = 1 * 3600  # 2小時有效期
+DEFAULT_TIMEOUT = 30  # 增加超時時間
 CHANNEL_DELAY = 3  # 增加頻道之間的延遲時間（秒）
 MAX_RETRIES = 3  # 最大重試次數
 
@@ -36,27 +34,20 @@ MAX_RETRIES = 3  # 最大重試次數
 DEFAULT_USER = os.environ.get('GTV_USER', '')
 DEFAULT_PASS = os.environ.get('GTV_PASS', '')
 
-# 加載緩存
-if os.path.exists(CACHE_FILE):
-    try:
-        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-            raw = json.load(f)
-            CACHE = {k: (float(v[0]), v[1]) for k, v in raw.items()}
-    except Exception:
-        CACHE = {}
-else:
-    CACHE = {}
-
-def save_cache():
-    try:
-        serializable = {k: [v[0], v[1]] for k, v in CACHE.items()}
-        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-            json.dump(serializable, f)
-    except Exception as e:
-        print(f"⚠️緩存儲存失敗: {e}")
+# 記憶體緩存
+channel_cache = {}
+CACHE_EXPIRATION_TIME = 10800  # 3小時有效期
+cache_play_urls = {}
 
 def get_channel_info(fn_channel_id, ua, timeout):
     """獲取頻道信息"""
+    # 檢查緩存
+    current_time = time.time()
+    if fn_channel_id in channel_cache:
+        cache_time, data = channel_cache[fn_channel_id]
+        if current_time - cache_time < CACHE_EXPIRATION_TIME:
+            return data
+    
     get_channel_api = f'https://api2.4gtv.tv/Channel/GetChannel/{fn_channel_id}'
     headers = {
         'User-Agent': ua,
@@ -70,8 +61,12 @@ def get_channel_info(fn_channel_id, ua, timeout):
     if response.status_code != 200:
         return None
         
-    data = response.json()
-    return data.get('Data', {})
+    data = response.json().get('Data', {})
+    
+    # 更新緩存
+    channel_cache[fn_channel_id] = (current_time, data)
+    
+    return data
 
 def generate_uuid(user):
     """根據賬號和目前日期生成唯一 UUID，確保不同用戶每天 UUID 不同"""
@@ -124,6 +119,14 @@ def get_all_channels(ua, timeout):
 
 def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout, max_retries=MAX_RETRIES):
     """帶重試機制的獲取頻道URL函數"""
+    # 檢查緩存
+    current_time = time.time()
+    cache_key = f"{channel_id}_{fnCHANNEL_ID}"
+    if cache_key in cache_play_urls:
+        cache_time, url = cache_play_urls[cache_key]
+        if current_time - cache_time < CACHE_EXPIRATION_TIME:
+            return url
+    
     for attempt in range(max_retries):
         try:
             headers = {
@@ -149,7 +152,10 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
             resp.raise_for_status()
             data = resp.json()
             if data.get('Success') and 'flstURLs' in data.get('Data', {}):
-                return data['Data']['flstURLs'][1]
+                url = data['Data']['flstURLs'][1]
+                # 更新緩存
+                cache_play_urls[cache_key] = (current_time, url)
+                return url
             return None
         except Exception as e:
             if attempt < max_retries - 1:
