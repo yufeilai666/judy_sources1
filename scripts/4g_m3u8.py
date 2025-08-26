@@ -35,11 +35,8 @@ DEFAULT_USER = os.environ.get('GTV_USER', '')
 DEFAULT_PASS = os.environ.get('GTV_PASS', '')
 
 # 記憶體緩存
-channel_cache = {}
-CACHE_EXPIRATION_TIME = 10800  # 3小時有效期
 cache_play_urls = {}
-
-
+CACHE_EXPIRATION_TIME = 10800  # 3小時有效期
 
 def generate_uuid(user):
     """根據賬號和目前日期生成唯一 UUID，確保不同用戶每天 UUID 不同"""
@@ -139,20 +136,13 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
                 return None
     return None
 
-def get_highest_bitrate_url(master_url, fnCHANNEL_ID, ua, timeout):
-    """獲取最高碼率的URL"""
-    # 從API獲取頻道信息
-    channel_info = get_channel_info(fnCHANNEL_ID, ua, timeout)
-    if channel_info and 'lstALL_BITRATE' in channel_info:
-        bitrates = channel_info['lstALL_BITRATE']
-        if bitrates:
-            # 找到最高碼率
-            highest_bitrate = max([int(b) for b in bitrates if b.isdigit()])
-            
-            # 直接替換URL中的index.m3u8為最高碼率
-            return master_url.replace('index.m3u8', f'{highest_bitrate}.m3u8')
+def get_highest_bitrate_url(master_url):
+    """嘗試獲取更高質量的URL，將720.m3u8替換為1080.m3u8"""
+    # 嘗試將720p替換為1080p
+    if '720.m3u8' in master_url:
+        return master_url.replace('720.m3u8', '1080.m3u8')
     
-    # 如果無法從API獲取，則返回原始URL
+    # 如果沒有720p，則保持原樣
     return master_url
 
 def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", delay=CHANNEL_DELAY):
@@ -202,8 +192,8 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
                     failed_list.append(channel_name)
                     continue
                     
-                # 獲取最高碼率URL
-                highest_url = get_highest_bitrate_url(stream_url, fnCHANNEL_ID, ua, timeout)
+                # 嘗試獲取更高質量的URL
+                highest_url = get_highest_bitrate_url(stream_url)
                 
                 # 添加到M3U內容
                 m3u_content += f'#EXTINF:-1 tvg-id="{channel_id}" tvg-name="{channel_name}" tvg-logo="{channel_logo}" group-title="{channel_type}",{channel_name}\n'
