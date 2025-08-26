@@ -114,7 +114,7 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
                 "fnCHANNEL_ID": fnCHANNEL_ID,
                 "clsAPP_IDENTITY_VALIDATE_ARUS": {"fsVALUE": fsVALUE, "fsENC_KEY": fsenc_key},
                 "fsASSET_ID": channel_id,
-                "fsDEVICE_TYPE": "mobile"
+                "fsDEVICE_TYPE": "pc"
             }
             scraper = cloudscraper.create_scraper()
             scraper.headers.update({"User-Agent": ua})
