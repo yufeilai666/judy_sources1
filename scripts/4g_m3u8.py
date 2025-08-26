@@ -29,6 +29,7 @@ DEFAULT_USER_AGENT = "%E5%9B%9B%E5%AD%A3%E7%B7%9A%E4%B8%8A/4 CFNetwork/3826.500.
 DEFAULT_TIMEOUT = 10  # seconds
 CACHE_FILE = os.path.expanduser('~/.4gtvcache.txt')
 CACHE_TTL = 1 * 3600  # 2小時有效期
+CHANNEL_DELAY = 1  # 頻道之間的延遲時間（秒）
 
 # 默認賬號(可被環境變量覆蓋)
 DEFAULT_USER = os.environ.get('GTV_USER', '')
@@ -163,10 +164,10 @@ def get_highest_bitrate_url(master_url, fnCHANNEL_ID, ua, timeout):
     # 如果無法從API獲取，則返回原始URL
     return master_url
 
-def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist"):
+def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", delay=CHANNEL_DELAY):
     """生成M3U播放清單"""
     try:
-        # 創建輸出目錄
+        # 建立輸出目錄
         os.makedirs(output_dir, exist_ok=True)
         
         # 生成認證信息
@@ -181,8 +182,10 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist"):
         # 獲取所有頻道
         channels = get_all_channels(ua, timeout)
         
-        # 創建M3U文件
+        # 建立M3U檔案
         m3u_content = "#EXTM3U\n"
+        successful_channels = 0
+        failed_channels = 0
         
         for channel in channels:
             channel_id = channel.get("fs4GTV_ID", "")
@@ -195,27 +198,40 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist"):
             if not channel_id.startswith("4gtv-live"):
                 continue
                 
-            # 獲取頻道URL
-            stream_url = get_4gtv_channel_url(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout)
-            if not stream_url:
-                print(f"無法獲取頻道 {channel_name} 的URL")
-                continue
+            # 添加延遲
+            time.sleep(delay)
                 
-            # 獲取最高碼率URL
-            highest_url = get_highest_bitrate_url(stream_url, fnCHANNEL_ID, ua, timeout)
-            
-            # 添加到M3U內容
-            m3u_content += f'#EXTINF:-1 tvg-id="{channel_id}" tvg-name="{channel_name}" tvg-logo="{channel_logo}" group-title="{channel_type}",{channel_name}\n'
-            m3u_content += f"{highest_url}\n"
-            
-            print(f"已添加頻道: {channel_name}")
+            # 獲取頻道URL
+            try:
+                stream_url = get_4gtv_channel_url(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout)
+                if not stream_url:
+                    print(f"❌ 無法獲取頻道 {channel_name} 的URL")
+                    failed_channels += 1
+                    continue
+                    
+                # 獲取最高碼率URL
+                highest_url = get_highest_bitrate_url(stream_url, fnCHANNEL_ID, ua, timeout)
+                
+                # 添加到M3U內容
+                m3u_content += f'#EXTINF:-1 tvg-id="{channel_id}" tvg-name="{channel_name}" tvg-logo="{channel_logo}" group-title="{channel_type}",{channel_name}\n'
+                m3u_content += f"{highest_url}\n"
+                
+                print(f"✅ 已添加頻道: {channel_name}")
+                successful_channels += 1
+                
+            except Exception as e:
+                print(f"❌ 處理頻道 {channel_name} 時出錯: {e}")
+                failed_channels += 1
+                continue
         
-        # 寫入文件
+        # 寫入檔案
         output_path = os.path.join(output_dir, "4gtv.m3u")
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(m3u_content)
         
         print(f"播放清單已生成: {output_path}")
+        print(f"成功處理: {successful_channels} 個頻道")
+        print(f"失敗處理: {failed_channels} 個頻道")
         return True
         
     except Exception as e:
@@ -233,11 +249,12 @@ def main():
     parser.add_argument('--ua', type=str, default=DEFAULT_USER_AGENT, help='用戶代理')
     parser.add_argument('--timeout', type=int, default=DEFAULT_TIMEOUT, help='超時時間(秒)')
     parser.add_argument('--output-dir', type=str, default="playlist", help='輸出目錄')
+    parser.add_argument('--delay', type=float, default=CHANNEL_DELAY, help='頻道之間的延遲時間(秒)')
     
     args = parser.parse_args()
     
     if args.generate_playlist:
-        success = generate_m3u_playlist(args.user, args.password, args.ua, args.timeout, args.output_dir)
+        success = generate_m3u_playlist(args.user, args.password, args.ua, args.timeout, args.output_dir, args.delay)
         return 0 if success else 1
     else:
         parser.print_help()
