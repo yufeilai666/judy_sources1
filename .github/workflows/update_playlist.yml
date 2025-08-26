@@ -26,25 +26,18 @@ jobs:
         python -m pip install --upgrade pip
         pip install cloudscraper pycryptodome requests
         
-    - name: Create scripts directory
-      run: mkdir -p scripts
-      
-    - name: Copy script file
+    - name: Create directories
       run: |
-        # 如果腳本不在倉庫中，可以從其他地方獲取
-        # 這裡假設腳本已經在倉庫的 scripts 目錄中
-        # 如果沒有，您需要從其他地方獲取或創建它
-        echo "確保 4g_m3u8.py 文件存在於 scripts 目錄中"
+        mkdir -p scripts
+        mkdir -p playlist
         
-    - name: Create playlist directory
-      run: mkdir -p playlist
-      
     - name: Generate playlist
       env:
         GTV_USER: ${{ secrets.GTV_USER }}
         GTV_PASS: ${{ secrets.GTV_PASS }}
       run: |
-        python scripts/4g_m3u8.py --generate-playlist --user "$GTV_USER" --password "$GTV_PASS"
+        # 使用延遲參數，每個頻道之間延遲2秒
+        python scripts/4g_m3u8.py --generate-playlist --delay 2
         
     - name: Commit and push if changed
       run: |
