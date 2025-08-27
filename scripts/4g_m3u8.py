@@ -27,8 +27,8 @@ log.disabled = True
 # 默認配置
 DEFAULT_USER_AGENT = "%E5%9B%9B%E5%AD%A3%E7%B7%9A%E4%B8%8A/4 CFNetwork/3826.500.131 Darwin/24.5.0"
 DEFAULT_TIMEOUT = 30  # 增加超時時間
-CHANNEL_DELAY = 1  # 增加頻道之間的延遲時間（秒）
-MAX_RETRIES = 1  # 最大重試次數
+CHANNEL_DELAY = 3  # 增加頻道之間的延遲時間（秒）
+MAX_RETRIES = 3  # 最大重試次數
 
 # 默認賬號(可被環境變量覆蓋)
 DEFAULT_USER = os.environ.get('GTV_USER', '')
@@ -163,8 +163,8 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
 def get_highest_bitrate_url(master_url):
     """嘗試獲取更高質量的URL"""
     # 嘗試將720p替換為1080p
-    if 'index.m3u8' in master_url:
-        return master_url.replace('index.m3u8', '1080.m3u8')
+    if '720.m3u8' in master_url:
+        return master_url.replace('720.m3u8', '1080.m3u8')
     
     # 如果沒有720p，則保持原樣
     return master_url
@@ -193,6 +193,27 @@ def find_working_proxy(proxies, timeout=10):
     print("❌ 沒有找到可用的代理服務器")
     return None
 
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
+    """
+    打印進度條
+    @params:
+        iteration   - 當前進度 (Int)
+        total       - 總數 (Int)
+        prefix      - 前綴字符串 (Str)
+        suffix      - 後綴字符串 (Str)
+        decimals    - 小數位數 (Int)
+        length      - 進度條長度 (Int)
+        fill        - 進度條填充字符 (Str)
+        print_end   - 結束字符 (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=print_end)
+    # 如果完成，打印新行
+    if iteration == total: 
+        print()
+
 def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", delay=CHANNEL_DELAY, proxy=None, auto_proxy=False):
     """生成M3U播放清單"""
     try:
@@ -205,6 +226,7 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
         # 創建輸出目錄
         os.makedirs(output_dir, exist_ok=True)
         
+        print("🔑 正在生成認證信息...")
         # 生成認證信息
         fsenc_key = generate_uuid(user)
         auth_val = generate_4gtv_auth()
@@ -213,9 +235,16 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
         if not fsVALUE:
             print("❌ 登錄失敗")
             return False
-            
+        
+        print("📡 正在獲取頻道列表...")
         # 獲取所有頻道
         channels = get_all_channels(ua, timeout, proxy)
+        
+        if not channels:
+            print("❌ 無法獲取頻道列表")
+            return False
+            
+        print(f"📺 共找到 {len(channels)} 個頻道")
         
         # 創建M3U文件
         m3u_content = "#EXTM3U\n"
@@ -223,59 +252,73 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
         failed_channels = 0
         failed_list = []
         
-        for channel in channels:
+        # 顯示進度條
+        print("🚀 開始處理頻道:")
+        total_channels = len(channels)
+        
+        for index, channel in enumerate(channels):
             channel_id = channel.get("fs4GTV_ID", "")
             channel_name = channel.get("fsNAME", "")
             channel_type = channel.get("fsTYPE_NAME", "")
             channel_logo = channel.get("fsLOGO_MOBILE", "")
             fnCHANNEL_ID = channel.get("fnID", "")
             
+            # 顯示當前處理的頻道信息
+            print(f"\n[{index+1}/{total_channels}] 處理頻道: {channel_name}")
+            
             # 添加延遲
             time.sleep(delay)
                 
             # 獲取頻道URL（帶重試機制）
             try:
+                print(f"   🔗 獲取頻道URL...")
                 stream_url = get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout, proxy)
                 if not stream_url:
-                    print(f"❌ 無法獲取頻道 {channel_name} 的URL")
+                    print(f"   ❌ 無法獲取頻道 {channel_name} 的URL")
                     failed_channels += 1
-                    failed_list.append(channel_name)
+                    failed_list.append((channel_name, "無法獲取URL"))
                     continue
                     
                 # 嘗試獲取更高質量的URL
+                print(f"   📶 嘗試獲取高質量URL...")
                 highest_url = get_highest_bitrate_url(stream_url)
                 
                 # 添加到M3U內容
                 m3u_content += f'#EXTINF:-1 tvg-id="{channel_name}" tvg-name="{channel_name}" tvg-logo="{channel_logo}" group-title="{channel_type}",{channel_name}\n'
                 m3u_content += f"{highest_url}\n"
                 
-                print(f"✅ 已添加頻道: {channel_name}")
+                print(f"   ✅ 已添加頻道: {channel_name}")
                 successful_channels += 1
                 
             except Exception as e:
-                print(f"❌ 處理頻道 {channel_name} 時出錯: {e}")
+                print(f"   ❌ 處理頻道 {channel_name} 時出錯: {e}")
                 failed_channels += 1
-                failed_list.append(channel_name)
+                failed_list.append((channel_name, str(e)))
                 continue
+            
+            # 更新進度條
+            print_progress_bar(index + 1, total_channels, prefix='進度:', suffix=f'完成 {index+1}/{total_channels}')
         
         # 寫入文件
         output_path = os.path.join(output_dir, "4gtv.m3u")
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(m3u_content)
         
-        print(f"\n📊 播放清單生成完成: {output_path}")
+        print(f"\n🎉 播放清單生成完成: {output_path}")
         print(f"✅ 成功處理: {successful_channels} 個頻道")
         print(f"❌ 失敗處理: {failed_channels} 個頻道")
         
         if failed_list:
             print("\n📋 失敗頻道列表:")
-            for channel in failed_list:
-                print(f"   - {channel}")
+            for channel_name, error in failed_list:
+                print(f"   - {channel_name}: {error}")
         
         return True
         
     except Exception as e:
         print(f"❌ 生成播放清單時出錯: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def main():
@@ -293,6 +336,7 @@ def main():
     parser.add_argument('--retries', type=int, default=MAX_RETRIES, help='最大重試次數')
     parser.add_argument('--proxy', type=str, help='使用代理服務器 (例如: http://proxy.tw.example.com:8080)')
     parser.add_argument('--auto-proxy', action='store_true', help='自動嘗試使用台灣代理')
+    parser.add_argument('--verbose', action='store_true', help='顯示詳細處理信息')
     
     args = parser.parse_args()
     
