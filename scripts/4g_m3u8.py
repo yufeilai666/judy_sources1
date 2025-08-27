@@ -36,7 +36,7 @@ DEFAULT_PASS = os.environ.get('GTV_PASS', '')
 
 # 記憶體緩存
 cache_play_urls = {}
-CACHE_EXPIRATION_TIME = 3600  # 1小時有效期
+CACHE_EXPIRATION_TIME = 86400  # 24小時有效期
 
 def generate_uuid(user):
     """根據賬號和目前日期生成唯一 UUID，確保不同用戶每天 UUID 不同"""
@@ -100,7 +100,7 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
     for attempt in range(max_retries):
         try:
             headers = {
-                "content-type": "application/json",
+                "content-type": "application/json; charset=utf-8",
                 "fsenc_key": fsenc_key,
                 "accept": "*/*",
                 "fsdevice": "iOS",
@@ -108,7 +108,8 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
                 "fsversion": "3.2.8",
                 "4gtv_auth": auth_val,
                 "Referer": "https://www.4gtv.tv/",
-                "User-Agent": ua
+                "User-Agent": ua,
+                'X-Forwarded-For': 'https://api2.4gtv.tv'
             }
             payload = {
                 "fnCHANNEL_ID": fnCHANNEL_ID,
