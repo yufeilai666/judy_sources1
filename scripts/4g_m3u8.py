@@ -38,8 +38,8 @@ DEFAULT_PASS = os.environ.get('GTV_PASS', '')
 cache_play_urls = {}
 CACHE_EXPIRATION_TIME = 86400  # 24小時有效期
 
-# 台灣代理服務器列表（示例，請使用實際可用的代理）
-TAIWAN_PROXIES = [
+# 代理服務器清單
+PROXY_PROXIES = [
     "http://210.59.182.144:3128",
     "http://219.87.79.144:80",
     "http://211.75.95.66:80",
@@ -161,12 +161,14 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
     return None
 
 def get_highest_bitrate_url(master_url):
-    """嘗試獲取更高質量的URL"""
-    # 嘗試將720p替換為1080p
-    if 'index.m3u8' in master_url:
+    """嘗試獲取更高質量的URL - 只對特定開頭的網址進行處理"""
+    # 只對以 "https://4gtvfree-mozai.4gtv.tv" 開頭的網址進行處理
+    if master_url.startswith("https://4gtvfree-mozai.4gtv.tv") and 'index.m3u8' in master_url:
+        print(f"   📶 嘗試獲取高質量URL (1080p)...")
         return master_url.replace('index.m3u8', '1080.m3u8')
     
-    # 如果沒有720p，則保持原樣
+    # 對於其他網址，保持原樣
+    print(f"   📶 使用原始URL (非4gtvfree-mozai域名)")
     return master_url
 
 def test_proxy_connection(proxy, timeout=10):
@@ -178,14 +180,14 @@ def test_proxy_connection(proxy, timeout=10):
         response = scraper.get(test_url, timeout=timeout)
         if response.status_code == 200:
             print(f"✅ 代理測試成功: {proxy}")
-            print(f"   當前IP: {response.json()['origin']}")
+            print(f"   目前IP: {response.json()['origin']}")
             return True
     except Exception as e:
         print(f"❌ 代理測試失敗: {proxy} - {e}")
     return False
 
 def find_working_proxy(proxies, timeout=10):
-    """從代理列表中尋找可用的代理"""
+    """從代理清單中尋找可用的代理"""
     print("🔍 正在測試代理服務器...")
     for proxy in proxies:
         if test_proxy_connection(proxy, timeout):
@@ -197,7 +199,7 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     """
     打印進度條
     @params:
-        iteration   - 當前進度 (Int)
+        iteration   - 目前進度 (Int)
         total       - 總數 (Int)
         prefix      - 前綴字符串 (Str)
         suffix      - 後綴字符串 (Str)
@@ -219,11 +221,11 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
     try:
         # 自動尋找台灣代理
         if auto_proxy:
-            proxy = find_working_proxy(TAIWAN_PROXIES, timeout)
+            proxy = find_working_proxy(PROXY_PROXIES, timeout)
             if not proxy:
                 print("⚠️  將不使用代理繼續運行")
         
-        # 創建輸出目錄
+        # 建立輸出目錄
         os.makedirs(output_dir, exist_ok=True)
         
         print("🔑 正在生成認證信息...")
@@ -236,17 +238,17 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
             print("❌ 登錄失敗")
             return False
         
-        print("📡 正在獲取頻道列表...")
+        print("📡 正在獲取頻道清單...")
         # 獲取所有頻道
         channels = get_all_channels(ua, timeout, proxy)
         
         if not channels:
-            print("❌ 無法獲取頻道列表")
+            print("❌ 無法獲取頻道清單")
             return False
             
         print(f"📺 共找到 {len(channels)} 個頻道")
         
-        # 創建M3U文件
+        # 建立M3U檔案
         m3u_content = "#EXTM3U\n"
         successful_channels = 0
         failed_channels = 0
@@ -263,7 +265,7 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
             channel_logo = channel.get("fsLOGO_MOBILE", "")
             fnCHANNEL_ID = channel.get("fnID", "")
             
-            # 顯示當前處理的頻道信息
+            # 顯示目前處理的頻道信息
             print(f"\n[{index+1}/{total_channels}] 處理頻道: {channel_name}")
             
             # 添加延遲
@@ -279,8 +281,7 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
                     failed_list.append((channel_name, "無法獲取URL"))
                     continue
                     
-                # 嘗試獲取更高質量的URL
-                print(f"   📶 嘗試獲取高質量URL...")
+                # 嘗試獲取更高質量的URL（僅對特定域名）
                 highest_url = get_highest_bitrate_url(stream_url)
                 
                 # 添加到M3U內容
@@ -299,7 +300,7 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
             # 更新進度條
             print_progress_bar(index + 1, total_channels, prefix='進度:', suffix=f'完成 {index+1}/{total_channels}')
         
-        # 寫入文件
+        # 寫入檔案
         output_path = os.path.join(output_dir, "4gtv.m3u")
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(m3u_content)
@@ -309,7 +310,7 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
         print(f"❌ 失敗處理: {failed_channels} 個頻道")
         
         if failed_list:
-            print("\n📋 失敗頻道列表:")
+            print("\n📋 失敗頻道清單:")
             for channel_name, error in failed_list:
                 print(f"   - {channel_name}: {error}")
         
