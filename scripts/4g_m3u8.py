@@ -163,8 +163,8 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
 def get_highest_bitrate_url(master_url):
     """嘗試獲取更高質量的URL"""
     # 嘗試將720p替換為1080p
-    if '720.m3u8' in master_url:
-        return master_url.replace('720.m3u8', '1080.m3u8')
+    if 'index.m3u8' in master_url:
+        return master_url.replace('index.m3u8', '1080.m3u8')
     
     # 如果沒有720p，則保持原樣
     return master_url
