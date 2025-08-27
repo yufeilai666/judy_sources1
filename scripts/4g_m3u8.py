@@ -114,7 +114,7 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
                 "fnCHANNEL_ID": fnCHANNEL_ID,
                 "clsAPP_IDENTITY_VALIDATE_ARUS": {"fsVALUE": fsVALUE, "fsENC_KEY": fsenc_key},
                 "fsASSET_ID": channel_id,
-                "fsDEVICE_TYPE": "pc"
+                "fsDEVICE_TYPE": "mobile"
             }
             scraper = cloudscraper.create_scraper()
             scraper.headers.update({"User-Agent": ua})
@@ -140,7 +140,7 @@ def get_highest_bitrate_url(master_url):
     """嘗試獲取更高質量的URL"""
     # 嘗試將720p替換為1080p
     if '720.m3u8' in master_url:
-        return master_url.replace('index.m3u8', '1080.m3u8')
+        return master_url.replace('/index.m3u8?', '/1080.m3u8?')
     
     # 如果沒有720p，則保持原樣
     return master_url
@@ -177,7 +177,7 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
             fnCHANNEL_ID = channel.get("fnID", "")
             
             # 只處理4gtv-live頻道
-            if not channel_id.startswith("4gtv-live"):
+            if not channel_id.startswith("-live"):
                 continue
                 
             # 添加延遲
@@ -196,7 +196,7 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
                 highest_url = get_highest_bitrate_url(stream_url)
                 
                 # 添加到M3U內容
-                m3u_content += f'#EXTINF:-1 tvg-id="{channel_id}" tvg-name="{channel_name}" tvg-logo="{channel_logo}" group-title="{channel_type}",{channel_name}\n'
+                m3u_content += f'#EXTINF:-1 tvg-id="{channel_name}" tvg-name="{channel_name}" tvg-logo="{channel_logo}" group-title="{channel_type}",{channel_name}\n'
                 m3u_content += f"{highest_url}\n"
                 
                 print(f"✅ 已添加頻道: {channel_name}")
