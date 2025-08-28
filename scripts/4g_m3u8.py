@@ -90,7 +90,7 @@ def sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout, proxy=None):
     return data.get("Data") if data.get("Success") else None
 
 def get_all_channels(ua, timeout, proxy=None):
-    url = 'https://api2.4gtv.tv/Channel/GetChannelBySetId/1/pc/L/V'
+    url = 'https://api2.4gtv.tv/Channel/GetChannelBySetId/4/pc/L/V'
     headers = {"accept": "*/*", "origin": "https://www.4gtv.tv", "referer": "https://www.4gtv.tv/", "User-AAgent": ua}
     scraper = cloudscraper.create_scraper()
     scraper.headers.update({"User-Agent": ua})
