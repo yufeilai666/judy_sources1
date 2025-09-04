@@ -14,6 +14,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 import requests
 import logging
+import concurrent.futures
 
 # 關閉所有警告和日誌
 warnings.filterwarnings("ignore")
@@ -26,26 +27,20 @@ log.disabled = True
 
 # 默認配置
 DEFAULT_USER_AGENT = "%E5%9B%9B%E5%AD%A3%E7%B7%9A%E4%B8%8A/4 CFNetwork/3826.500.131 Darwin/24.5.0"
-DEFAULT_TIMEOUT = 30  # 增加超時時間
-CHANNEL_DELAY = 1  # 增加頻道之間的延遲時間（秒）
-MAX_RETRIES = 1  # 最大重試次數
+DEFAULT_TIMEOUT = 30
+MAX_RETRIES = 1
+MAX_WORKERS = 10  # 最大線程數
 
 # 默認賬號(可被環境變量覆蓋)
 DEFAULT_USER = os.environ.get('GTV_USER', '')
 DEFAULT_PASS = os.environ.get('GTV_PASS', '')
 
+# 頻道集合ID列表
+CHANNEL_SET_IDS = [1, 2, 33, 4]
+
 # 記憶體緩存
 cache_play_urls = {}
 CACHE_EXPIRATION_TIME = 86400  # 24小時有效期
-
-# 代理服務器清單
-PROXY_PROXIES = [
-    "http://210.59.182.144:3128",
-    "http://219.87.79.144:80",
-    "http://211.75.95.66:80",
-    "http://122.116.125.115:8888",
-    "http://60.249.94.59:3128",
-]
 
 def generate_uuid(user):
     """根據賬號和目前日期生成唯一 UUID，確保不同用戶每天 UUID 不同"""
@@ -66,7 +61,7 @@ def generate_4gtv_auth():
     sha512 = hashlib.sha512((today + decrypted).encode()).digest()
     return base64.b64encode(sha512).decode()
 
-def sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout, proxy=None):
+def sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout):
     url = "https://api2.4gtv.tv/AppAccount/SignIn"
     headers = {
         "Content-Type": "application/json; charset=UTF-8",
@@ -80,33 +75,59 @@ def sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout, proxy=None):
     scraper = cloudscraper.create_scraper()
     scraper.headers.update({"User-Agent": ua})
     
-    # 設置代理
-    if proxy:
-        scraper.proxies = {"http": proxy, "https": proxy}
-    
     resp = scraper.post(url, headers=headers, json=payload, timeout=timeout)
     resp.raise_for_status()
     data = resp.json()
     return data.get("Data") if data.get("Success") else None
 
-def get_all_channels(ua, timeout, proxy=None):
-    url = 'https://api2.4gtv.tv/Channel/GetChannelBySetId/4/pc/L/V'
-    headers = {"accept": "*/*", "origin": "https://www.4gtv.tv", "referer": "https://www.4gtv.tv/", "User-AAgent": ua}
-    scraper = cloudscraper.create_scraper()
-    scraper.headers.update({"User-Agent": ua})
+def get_all_channels(ua, timeout):
+    """獲取所有頻道集合的頻道，並移除重複頻道"""
+    all_channels = []
+    seen_channels = set()  # 用於跟踪已見過的頻道
     
-    # 設置代理
-    if proxy:
-        scraper.proxies = {"http": proxy, "https": proxy}
+    for set_id in CHANNEL_SET_IDS:
+        try:
+            print(f"📡 正在獲取頻道集合 ID {set_id} 的頻道清單...")
+            url = f'https://api2.4gtv.tv/Channel/GetChannelBySetId/{set_id}/pc/L/V'
+            headers = {"accept": "*/*", "origin": "https://www.4gtv.tv", "referer": "https://www.4gtv.tv/", "User-AAgent": ua}
+            scraper = cloudscraper.create_scraper()
+            scraper.headers.update({"User-Agent": ua})
+            
+            resp = scraper.get(url, headers=headers, timeout=timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("Success"):
+                channels = data.get("Data", [])
+                print(f"✅ 頻道集合 ID {set_id}: 找到 {len(channels)} 個頻道")
+                
+                # 過濾重複頻道
+                unique_channels = []
+                for channel in channels:
+                    channel_id = channel.get("fs4GTV_ID", "")
+                    channel_name = channel.get("fsNAME", "")
+                    
+                    # 使用頻道ID和名稱作為唯一標識
+                    channel_key = f"{channel_id}_{channel_name}"
+                    
+                    if channel_key not in seen_channels:
+                        seen_channels.add(channel_key)
+                        unique_channels.append(channel)
+                    else:
+                        print(f"   ⚠️  跳過重複頻道: {channel_name}")
+                
+                print(f"   📊 去重後: {len(unique_channels)} 個頻道")
+                all_channels.extend(unique_channels)
+            else:
+                print(f"⚠️  頻道集合 ID {set_id}: 獲取失敗")
+                
+        except Exception as e:
+            print(f"❌ 獲取頻道集合 ID {set_id} 時出錯: {e}")
+            continue
     
-    resp = scraper.get(url, headers=headers, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.json()
-    if data.get("Success"):
-        return data.get("Data", [])
-    return []
+    return all_channels
 
-def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout, proxy=None, max_retries=MAX_RETRIES):
+def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout, max_retries=MAX_RETRIES):
     """帶重試機制的獲取頻道URL函數"""
     # 檢查緩存
     current_time = time.time()
@@ -138,10 +159,6 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
             scraper = cloudscraper.create_scraper()
             scraper.headers.update({"User-Agent": ua})
             
-            # 設置代理
-            if proxy:
-                scraper.proxies = {"http": proxy, "https": proxy}
-            
             resp = scraper.post('https://api2.4gtv.tv/App/GetChannelUrl2', headers=headers, json=payload, timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
@@ -171,30 +188,6 @@ def get_highest_bitrate_url(master_url):
     print(f"   📶 使用原始URL (非4gtvfree-mozai域名)")
     return master_url
 
-def test_proxy_connection(proxy, timeout=10):
-    """測試代理連接是否有效"""
-    try:
-        test_url = "http://httpbin.org/ip"
-        scraper = cloudscraper.create_scraper()
-        scraper.proxies = {"http": proxy, "https": proxy}
-        response = scraper.get(test_url, timeout=timeout)
-        if response.status_code == 200:
-            print(f"✅ 代理測試成功: {proxy}")
-            print(f"   目前IP: {response.json()['origin']}")
-            return True
-    except Exception as e:
-        print(f"❌ 代理測試失敗: {proxy} - {e}")
-    return False
-
-def find_working_proxy(proxies, timeout=10):
-    """從代理清單中尋找可用的代理"""
-    print("🔍 正在測試代理服務器...")
-    for proxy in proxies:
-        if test_proxy_connection(proxy, timeout):
-            return proxy
-    print("❌ 沒有找到可用的代理服務器")
-    return None
-
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
     """
     打印進度條
@@ -216,15 +209,37 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     if iteration == total: 
         print()
 
-def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", delay=CHANNEL_DELAY, proxy=None, auto_proxy=False):
+def process_channel(channel, fsVALUE, fsenc_key, auth_val, ua, timeout):
+    """處理單個頻道的函數，用於多線程處理"""
+    channel_id = channel.get("fs4GTV_ID", "")
+    channel_name = channel.get("fsNAME", "")
+    channel_type = channel.get("fsTYPE_NAME", "")
+    channel_logo = channel.get("fsLOGO_MOBILE", "")
+    fnCHANNEL_ID = channel.get("fnID", "")
+    
+    # 處理channel_type：只取第一個部分（用逗號分割）
+    if channel_type:
+        channel_type = channel_type.split(',')[0]
+    
+    # 檢查是否為fast-live開頭，如果是則修改類型為FastTV飛速看
+    if channel_id.startswith('fast-live'):
+        channel_type = "FastTV飛速看"
+    
+    try:
+        stream_url = get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout)
+        if not stream_url:
+            return None, f"❌ 無法獲取頻道 {channel_name} 的URL", None, None, None
+            
+        # 嘗試獲取更高質量的URL（僅對特定域名）
+        highest_url = get_highest_bitrate_url(stream_url)
+        
+        return channel_name, highest_url, channel_logo, channel_type, None
+    except Exception as e:
+        return channel_name, None, None, None, f"❌ 處理頻道 {channel_name} 時出錯: {e}"
+
+def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist"):
     """生成M3U播放清單"""
     try:
-        # 自動尋找台灣代理
-        if auto_proxy:
-            proxy = find_working_proxy(PROXY_PROXIES, timeout)
-            if not proxy:
-                print("⚠️  將不使用代理繼續運行")
-        
         # 建立輸出目錄
         os.makedirs(output_dir, exist_ok=True)
         
@@ -232,21 +247,21 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
         # 生成認證信息
         fsenc_key = generate_uuid(user)
         auth_val = generate_4gtv_auth()
-        fsVALUE = sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout, proxy)
+        fsVALUE = sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout)
         
         if not fsVALUE:
             print("❌ 登錄失敗")
             return False
         
-        print("📡 正在獲取頻道清單...")
-        # 獲取所有頻道
-        channels = get_all_channels(ua, timeout, proxy)
+        print("📡 正在獲取所有頻道集合的頻道清單...")
+        # 獲取所有頻道（自動去重）
+        channels = get_all_channels(ua, timeout)
         
         if not channels:
             print("❌ 無法獲取頻道清單")
             return False
             
-        print(f"📺 共找到 {len(channels)} 個頻道")
+        print(f"📺 去重後共找到 {len(channels)} 個唯一頻道")
         
         # 建立M3U檔案
         m3u_content = "#EXTM3U\n"
@@ -255,50 +270,43 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
         failed_list = []
         
         # 顯示進度條
-        print("🚀 開始處理頻道:")
+        print("🚀 開始處理頻道 (使用多線程):")
         total_channels = len(channels)
         
-        for index, channel in enumerate(channels):
-            channel_id = channel.get("fs4GTV_ID", "")
-            channel_name = channel.get("fsNAME", "")
-            channel_type = channel.get("fsTYPE_NAME", "")
-            channel_logo = channel.get("fsLOGO_MOBILE", "")
-            fnCHANNEL_ID = channel.get("fnID", "")
+        # 使用多線程處理頻道
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            # 提交所有任務
+            future_to_channel = {
+                executor.submit(process_channel, channel, fsVALUE, fsenc_key, auth_val, ua, timeout): channel 
+                for channel in channels
+            }
             
-            # 顯示目前處理的頻道信息
-            print(f"\n[{index+1}/{total_channels}] 處理頻道: {channel_name}")
-            
-            # 添加延遲
-            time.sleep(delay)
+            # 處理完成的任务
+            for i, future in enumerate(concurrent.futures.as_completed(future_to_channel)):
+                channel = future_to_channel[future]
+                channel_name, stream_url, channel_logo, channel_type, error = future.result()
                 
-            # 獲取頻道URL（帶重試機制）
-            try:
-                print(f"   🔗 獲取頻道URL...")
-                stream_url = get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout, proxy)
+                # 更新進度條
+                print_progress_bar(i + 1, total_channels, prefix='進度:', suffix=f'完成 {i+1}/{total_channels}')
+                
+                if error:
+                    print(f"\n   {error}")
+                    failed_channels += 1
+                    failed_list.append((channel_name, error))
+                    continue
+                    
                 if not stream_url:
-                    print(f"   ❌ 無法獲取頻道 {channel_name} 的URL")
+                    print(f"\n   ❌ 無法獲取頻道 {channel_name} 的URL")
                     failed_channels += 1
                     failed_list.append((channel_name, "無法獲取URL"))
                     continue
-                    
-                # 嘗試獲取更高質量的URL（僅對特定域名）
-                highest_url = get_highest_bitrate_url(stream_url)
                 
                 # 添加到M3U內容
                 m3u_content += f'#EXTINF:-1 tvg-id="{channel_name}" tvg-name="{channel_name}" tvg-logo="{channel_logo}" group-title="{channel_type}",{channel_name}\n'
-                m3u_content += f"{highest_url}\n"
+                m3u_content += f"{stream_url}\n"
                 
-                print(f"   ✅ 已添加頻道: {channel_name}")
+                print(f"\n   ✅ 已添加頻道: {channel_name}")
                 successful_channels += 1
-                
-            except Exception as e:
-                print(f"   ❌ 處理頻道 {channel_name} 時出錯: {e}")
-                failed_channels += 1
-                failed_list.append((channel_name, str(e)))
-                continue
-            
-            # 更新進度條
-            print_progress_bar(index + 1, total_channels, prefix='進度:', suffix=f'完成 {index+1}/{total_channels}')
         
         # 寫入檔案
         output_path = os.path.join(output_dir, "4gtv.m3u")
@@ -333,10 +341,7 @@ def main():
     parser.add_argument('--ua', type=str, default=DEFAULT_USER_AGENT, help='用戶代理')
     parser.add_argument('--timeout', type=int, default=DEFAULT_TIMEOUT, help='超時時間(秒)')
     parser.add_argument('--output-dir', type=str, default="playlist", help='輸出目錄')
-    parser.add_argument('--delay', type=float, default=CHANNEL_DELAY, help='頻道之間的延遲時間(秒)')
     parser.add_argument('--retries', type=int, default=MAX_RETRIES, help='最大重試次數')
-    parser.add_argument('--proxy', type=str, help='使用代理服務器 (例如: http://proxy.tw.example.com:8080)')
-    parser.add_argument('--auto-proxy', action='store_true', help='自動嘗試使用台灣代理')
     parser.add_argument('--verbose', action='store_true', help='顯示詳細處理信息')
     
     args = parser.parse_args()
@@ -347,10 +352,7 @@ def main():
             args.password, 
             args.ua, 
             args.timeout, 
-            args.output_dir, 
-            args.delay, 
-            args.proxy,
-            args.auto_proxy
+            args.output_dir
         )
         return 0 if success else 1
     else:
