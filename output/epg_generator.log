@@ -21158,3 +21158,37 @@
 2025-09-08 01:27:53 | INFO | 共獲取 119 個頻道, 12494 個節目
 2025-09-08 01:27:53 | INFO | 電子節目表單已生成: /home/runner/work/EPG/EPG/output/4g.xml
 2025-09-08 01:27:53 | SUCCESS | EPG生成完成: /home/runner/work/EPG/EPG/output/4g.xml
+2025-09-09 01:19:51 | INFO | ==================================================
+2025-09-09 01:19:51 | INFO | 開始生成四季線上電子節目表單
+2025-09-09 01:19:51 | INFO | 開始時間: 2025-09-09 01:19:51
+2025-09-09 01:19:51 | INFO | 輸出目錄: /home/runner/work/EPG/EPG/output
+2025-09-09 01:19:51 | INFO | 正在獲取 四季線上 電子節目表
+2025-09-09 01:19:51 | INFO | 正在從線上獲取頻道清單...
+2025-09-09 01:19:53 | ERROR | 獲取頻道清單失敗: Message: session not created: This version of ChromeDriver only supports Chrome version 140
+Current browser version is 139.0.7258.154 with binary path /opt/google/chrome/chrome; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#sessionnotcreatedexception
+Stacktrace:
+#0 0x5599a6a4894a <unknown>
+#1 0x5599a64bd8a0 <unknown>
+#2 0x5599a64fe587 <unknown>
+#3 0x5599a64fd492 <unknown>
+#4 0x5599a64f7796 <unknown>
+#5 0x5599a64f3288 <unknown>
+#6 0x5599a6543386 <unknown>
+#7 0x5599a6542a56 <unknown>
+#8 0x5599a6534e03 <unknown>
+#9 0x5599a6501968 <unknown>
+#10 0x5599a65025e1 <unknown>
+#11 0x5599a6a0c548 <unknown>
+#12 0x5599a6a10272 <unknown>
+#13 0x5599a69f3313 <unknown>
+#14 0x5599a6a10dc5 <unknown>
+#15 0x5599a69d849f <unknown>
+#16 0x5599a6a35158 <unknown>
+#17 0x5599a6a35332 <unknown>
+#18 0x5599a6a47a53 <unknown>
+#19 0x7f751029caa4 <unknown>
+#20 0x7f7510329c3c <unknown>
+
+2025-09-09 01:19:53 | INFO | 共獲取 0 個頻道, 0 個節目
+2025-09-09 01:19:53 | INFO | 電子節目表單已生成: /home/runner/work/EPG/EPG/output/4g.xml
+2025-09-09 01:19:53 | SUCCESS | EPG生成完成: /home/runner/work/EPG/EPG/output/4g.xml
