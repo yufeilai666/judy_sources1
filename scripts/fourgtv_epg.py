@@ -11,9 +11,20 @@ from urllib3.util.retry import Retry
 import time
 import random
 import cloudscraper
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
+
+# 需要過濾的頻道名稱清單
+BLOCKED_CHANNELS = [
+    "鳳梨直擊台",
+    "香蕉直擊台",
+    "芭樂直擊台"
+]
 
 def create_cloudscraper():
     """建立Cloudscraper實例，繞過Cloudflare防護"""
@@ -164,8 +175,13 @@ def generate_xml(channels, programs, filename):
         
         # 使用channelName作為id
         channel_elem = ET.SubElement(tv, "channel", id=channel_name)
-        display_name = ET.SubElement(channel_elem, "display-name", lang="zh"))
+        display_name = ET.SubElement(channel_elem, "display-name", lang="zh")
         display_name.text = channel_name
+        
+        # 添加頻道描述
+        if channel.get("description"):
+            channel_desc = ET.SubElement(channel_elem, "desc", lang="zh")
+            channel_desc.text = channel["description"]
         
         if channel.get("logo"):
             icon = ET.SubElement(channel_elem, "icon", src=channel["logo"])
@@ -229,3 +245,4 @@ if __name__ == "__main__":
         logger.critical(f"EPG生成失敗: {str(e)}")
         logger.exception(e)
         exit(1)
+
