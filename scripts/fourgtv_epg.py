@@ -11,20 +11,9 @@ from urllib3.util.retry import Retry
 import time
 import random
 import cloudscraper
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
-
-# 需要過濾的頻道名稱清單
-BLOCKED_CHANNELS = [
-    "鳳梨直擊台",
-    "香蕉直擊台",
-    "芭樂直擊台"
-]
 
 def create_cloudscraper():
     """建立Cloudscraper實例，繞過Cloudflare防護"""
@@ -79,118 +68,26 @@ def get_4gtv_epg():
     return channels, programs
 
 def get_4gtv_channels():
-    """使用Selenium從線上獲取頻道清單"""
-    logger.info("正在從線上獲取頻道清單...")
-    
-    # 設置 Chrome 選項
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-infobars")
-    chrome_options.add_argument("--disable-notifications")
-    chrome_options.add_argument("--disable-popup-blocking")
-    chrome_options.add_argument("--disable-setuid-sandbox")
-    chrome_options.add_argument("--remote-debugging-port=9222")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
-    
-    try:
-        # 使用 webdriver-manager 自動管理驅動
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
-        )
-        
-        # 設置頁面加載超時時間
-        driver.set_page_load_timeout(30)
-        
-        # 訪問 API URL
-        api_url = "https://api2.4gtv.tv/Channel/GetAllChannel/pc/L"
-        logger.info(f"正在訪問: {api_url}")
-        driver.get(api_url)
-        
-        # 等待頁面加載
-        time.sleep(3)
-        
-        # 獲取頁面內容
-        content = driver.page_source
-        
-        # 檢查是否是 JSON 內容
-        if content.strip().startswith('{') or content.strip().startswith('['):
-            # 嘗試解析 JSON
-            try:
-                data = json.loads(content)
-            except json.JSONDecodeError:
-                logger.error(f"JSON 解析錯誤，內容: {content[:200]}")
-                return []
-        else:
-            logger.info(f"獲取到非 JSON 內容: {content[:200]}")
-            # 嘗試從 pre 標籤獲取數據
-            try:
-                pre_element = driver.find_element("tag name", "pre")
-                content = pre_element.text
-                data = json.loads(content)
-            except:
-                logger.error("無法解析內容為 JSON")
-                return []
-        
-        # 檢查數據結構
-        if "Data" not in data or not isinstance(data["Data"], list):
-            logger.error(f"API 返回無效數據: {data}")
-            return []
-        
-        # 提取所需字段並過濾特定頻道
-        extracted_data = []
-        for channel in data.get("Data", []):
-            channel_name = channel.get("fsNAME", "")
-            
-            # 檢查是否在禁止清單中
-            if any(blocked in channel_name for blocked in BLOCKED_CHANNELS):
-                logger.info(f"已跳過頻道: {channel_name}")
-                continue
-                
-            extracted_data.append({
-                "fsNAME": channel_name,
-                "fs4GTV_ID": channel.get("fs4GTV_ID"),
-                "fsLOGO_MOBILE": channel.get("fsLOGO_MOBILE"),
-                "fsDESCRIPTION": channel.get("fsDESCRIPTION")
-            })
-        
-        # 儲存到本地檔案
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        output_path = os.path.join(OUTPUT_DIR, 'fourgtv.json')
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(extracted_data, f, ensure_ascii=False, indent=2)
-        logger.success(f"頻道清單已儲存至: {output_path}")
-        
-        # 轉換為標準頻道格式
-        channels = [
-            {
-                "channelName": item["fsNAME"],
-                "channelId": item["fs4GTV_ID"],
-                "logo": item["fsLOGO_MOBILE"],
-                "description": item.get("fsDESCRIPTION", "")
-            }
-            for item in extracted_data
-        ]
-        
-        logger.info(f"成功獲取 {len(channels)} 個頻道")
-        logger.info(f"跳過頻道: {', '.join(BLOCKED_CHANNELS)}")
-        
-        return channels
-    
-    except Exception as e:
-        logger.error(f"獲取頻道清單失敗: {str(e)}")
-        return []
-    finally:
+    local_file = os.path.join(OUTPUT_DIR, 'fourgtv.json')
+    if os.path.exists(local_file):
         try:
-            if driver:
-                driver.quit()
-        except:
-            pass
+            logger.info(f"從本地檔案讀取頻道列表: {local_file}")
+            with open(local_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            channels = [
+                {
+                    "channelName": item["fsNAME"],
+                    "channelId": item["fs4GTV_ID"],
+                    "logo": item["fsLOGO_MOBILE"],
+                    "description": item.get("fsDESCRIPTION", "")
+                }
+                for item in data
+            ]
+            return channels
+        
+        except Exception as e:
+            logger.error(f"讀取本地頻道檔案失敗: {e}")
 
 def get_4gtv_programs_scraper(channel_id, channel_name, scraper):
     """獲取節目表"""
@@ -267,13 +164,8 @@ def generate_xml(channels, programs, filename):
         
         # 使用channelName作為id
         channel_elem = ET.SubElement(tv, "channel", id=channel_name)
-        display_name = ET.SubElement(channel_elem, "display-name", lang="zh")
+        display_name = ET.SubElement(channel_elem, "display-name", lang="zh"))
         display_name.text = channel_name
-        
-        # 添加頻道描述
-        if channel.get("description"):
-            channel_desc = ET.SubElement(channel_elem, "desc", lang="zh")
-            channel_desc.text = channel["description"]
         
         if channel.get("logo"):
             icon = ET.SubElement(channel_elem, "icon", src=channel["logo"])
