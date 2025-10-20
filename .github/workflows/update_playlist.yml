@@ -2,7 +2,7 @@ name: Update 4GTV Playlist
 
 on:
   schedule:
-    # 每3小时运行一次（UTC时间）
+    # 每3小時運行一次（UTC時間）
     - cron: '0 */3 * * *'
   workflow_dispatch: # 允許手動觸發
 
@@ -40,7 +40,7 @@ jobs:
         HTTPS_PROXY:  ${{ secrets. HTTPS_PROXY }}
       run: |
         # 使用較長的延遲和重試次數
-        python scripts/4g_m3u8.py --generate-playlist --delay 5 --retries 5 --timeout 20
+        python scripts/4g_m3u8.py --generate-playlist --delay 5 --retries 5 --timeout 30
         
     - name: Commit and push if changed
       run: |
