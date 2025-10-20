@@ -36,6 +36,8 @@ jobs:
       env:
         GTV_USER: ${{ secrets.GTV_USER }}
         GTV_PASS: ${{ secrets.GTV_PASS }}
+        HTTP_PROXY:  ${{ secrets.HTTP_PROXY }}
+        HTTPS_PROXY:  ${{ secrets. HTTPS_PROXY }}
       run: |
         # 使用較長的延遲和重試次數
         python scripts/4g_m3u8.py --generate-playlist --delay 5 --retries 5 --timeout 20
