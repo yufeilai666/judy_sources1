@@ -35,12 +35,16 @@ DEFAULT_USER = os.environ.get('GTV_USER', '')
 DEFAULT_PASS = os.environ.get('GTV_PASS', '')
 
 # 代理設置 (從環境變量讀取)
-HTTP_PROXY = os.environ.get('http_proxy', '')
-HTTPS_PROXY = os.environ.get('https_proxy', '')
+HTTP_PROXY = os.environ.get('http_proxy', '') or os.environ.get('HTTP_PROXY', '')
+HTTPS_PROXY = os.environ.get('https_proxy', '') or os.environ.get('HTTPS_PROXY', '')
 
 # 記憶體緩存
 cache_play_urls = {}
-CACHE_EXPIRATION_TIME = 3600  # 1小時有效期
+CACHE_EXPIRATION_TIME = 86400  # 24小時有效期
+
+def is_github_actions():
+    """檢查是否在 GitHub Actions 環境中運行"""
+    return os.environ.get('GITHUB_ACTIONS') == 'true'
 
 def get_proxies():
     """從環境變量獲取代理設置"""
@@ -49,7 +53,34 @@ def get_proxies():
         proxies['http'] = HTTP_PROXY
     if HTTPS_PROXY:
         proxies['https'] = HTTPS_PROXY
+    
+    if proxies:
+        if is_github_actions():
+            print(f"🔌 GitHub Actions 環境中使用代理: {proxies}")
+        else:
+            print(f"🔌 使用代理: {proxies}")
+    else:
+        if is_github_actions():
+            print("🔌 GitHub Actions 環境中未設置代理，使用直接連接")
+        else:
+            print("🔌 未設置代理，使用直接連接")
+    
     return proxies if proxies else None
+
+def test_proxy_connection(scraper, timeout=10):
+    """測試代理連接是否正常"""
+    try:
+        test_url = "https://httpbin.org/ip"
+        response = scraper.get(test_url, timeout=timeout)
+        if response.status_code == 200:
+            print("✅ 代理連接測試成功")
+            return True
+        else:
+            print(f"⚠️ 代理連接測試失敗，狀態碼: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"⚠️ 代理連接測試失敗: {e}")
+        return False
 
 def create_scraper_with_proxy(ua):
     """創建帶有代理設置的scraper"""
@@ -59,8 +90,17 @@ def create_scraper_with_proxy(ua):
     # 設置代理
     proxies = get_proxies()
     if proxies:
-        scraper.proxies.update(proxies)
-        print(f"🔌 使用代理: {proxies}")
+        try:
+            scraper.proxies.update(proxies)
+            
+            # 在非 GitHub Actions 環境中測試代理連接
+            if not is_github_actions():
+                if not test_proxy_connection(scraper):
+                    print("⚠️ 代理連接測試失敗，將使用直接連接")
+                    scraper.proxies.clear()
+        except Exception as e:
+            print(f"⚠️ 代理設置失敗: {e}，將使用直接連接")
+            scraper.proxies.clear()
     
     return scraper
 
@@ -340,12 +380,18 @@ def main():
     parser.add_argument('--retries', type=int, default=MAX_RETRIES, help='最大重試次數')
     parser.add_argument('--verbose', action='store_true', help='顯示詳細處理信息')
     parser.add_argument('--proxy', type=str, help='代理服務器 (例如: http://username:password@proxy.com:port)')
+    parser.add_argument('--no-proxy', action='store_true', help='強制不使用代理')
     
     args = parser.parse_args()
     
     # 設置代理（命令行參數優先於環境變量）
     global HTTP_PROXY, HTTPS_PROXY
-    if args.proxy:
+    
+    if args.no_proxy:
+        HTTP_PROXY = ''
+        HTTPS_PROXY = ''
+        print("🔌 強制禁用代理")
+    elif args.proxy:
         HTTP_PROXY = args.proxy
         HTTPS_PROXY = args.proxy
         print(f"🔌 使用命令行指定的代理: {args.proxy}")
