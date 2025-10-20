@@ -30,9 +30,9 @@ log.disabled = True
 # 默認配置
 DEFAULT_USER_AGENT = "%E5%9B%9B%E5%AD%A3%E7%B7%9A%E4%B8%8A/4 CFNetwork/3826.500.131 Darwin/24.5.0"
 DEFAULT_TIMEOUT = 30  # 增加超時時間
-CHANNEL_DELAY = 0.1  # 降低頻道之間的延遲時間（秒）
+CHANNEL_DELAY = 1  # 降低頻道之間的延遲時間（秒）
 MAX_RETRIES = 2  # 最大重試次數
-MAX_WORKERS = 10  # 最大併發工作線程數
+MAX_WORKERS = 5  # 最大併發工作線程數
 
 # 默認賬號(可被環境變量覆蓋)
 DEFAULT_USER = os.environ.get('GTV_USER', '')
