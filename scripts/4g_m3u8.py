@@ -38,6 +38,31 @@ DEFAULT_PASS = os.environ.get('GTV_PASS', '')
 cache_play_urls = {}
 CACHE_EXPIRATION_TIME = 86400  # 24小時有效期
 
+def get_proxies():
+    """從環境變量獲取代理配置"""
+    http_proxy = os.environ.get('http_proxy') or os.environ.get('HTTP_PROXY')
+    https_proxy = os.environ.get('https_proxy') or os.environ.get('HTTPS_PROXY')
+    
+    proxies = {}
+    if http_proxy:
+        proxies['http'] = http_proxy
+    if https_proxy:
+        proxies['https'] = https_proxy
+    
+    return proxies if proxies else None
+
+def setup_scraper_with_proxy(scraper, ua):
+    """設置帶有代理的scraper"""
+    scraper.headers.update({"User-Agent": ua})
+    
+    # 設置代理
+    proxies = get_proxies()
+    if proxies:
+        scraper.proxies.update(proxies)
+        print(f"🔌 使用代理: {proxies}")
+    
+    return scraper
+
 def generate_uuid(user):
     """根據賬號和目前日期生成唯一 UUID，確保不同用戶每天 UUID 不同"""
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
@@ -69,7 +94,7 @@ def sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout):
     }
     payload = {"fsUSER": user, "fsPASSWORD": password, "fsENC_KEY": fsenc_key}
     scraper = cloudscraper.create_scraper()
-    scraper.headers.update({"User-Agent": ua})
+    scraper = setup_scraper_with_proxy(scraper, ua)
     
     resp = scraper.post(url, headers=headers, json=payload, timeout=timeout)
     resp.raise_for_status()
@@ -87,7 +112,7 @@ def get_all_channels(ua, timeout):
         url = f'https://api2.4gtv.tv/Channel/GetChannelBySetId/{set_id}/pc/L/V'
         headers = {"accept": "*/*", "origin": "https://www.4gtv.tv", "referer": "https://www.4gtv.tv/", "User-AAgent": ua}
         scraper = cloudscraper.create_scraper()
-        scraper.headers.update({"User-Agent": ua})
+        scraper = setup_scraper_with_proxy(scraper, ua)
         
         try:
             resp = scraper.get(url, headers=headers, timeout=timeout)
@@ -140,7 +165,7 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
                 "fsDEVICE_TYPE": "mobile"
             }
             scraper = cloudscraper.create_scraper()
-            scraper.headers.update({"User-Agent": ua})
+            scraper = setup_scraper_with_proxy(scraper, ua)
             
             resp = scraper.post('https://api2.4gtv.tv/App/GetChannelUrl2', headers=headers, json=payload, timeout=timeout)
             resp.raise_for_status()
