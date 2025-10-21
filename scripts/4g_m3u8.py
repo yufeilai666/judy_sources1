@@ -25,7 +25,7 @@ log.setLevel(logging.ERROR)
 log.disabled = True
 
 # 默認配置
-DEFAULT_USER_AGENT = "%E5%9B%9B%E5%AD%A3%E7%B7%9A%E4%B8%8A/4 CFNetwork/3826.500.131 Darwin/24.5.0"
+DEFAULT_USER_AGENT = "okhttp/4.9.2"
 DEFAULT_TIMEOUT = 30  # 增加超時時間
 CHANNEL_DELAY = 2  # 增加頻道之間的延遲時間（秒）
 MAX_RETRIES = 1  # 最大重試次數
@@ -128,8 +128,8 @@ def sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout):
     headers = {
         "Content-Type": "application/json; charset=UTF-8",
         "fsenc_key": fsenc_key,
-        "fsdevice": "iOS",
-        "fsversion": "3.2.8",
+        "fsdevice": "Android",
+        "fsversion": "2.6.1",
         "4gtv_auth": auth_val,
         "User-Agent": ua
     }
@@ -190,11 +190,11 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
                 "content-type": "application/json; charset=utf-8",
                 "fsenc_key": fsenc_key,
                 "accept": "*/*",
-                "fsdevice": "iOS",
+                "fsdevice": "Android",
                 "fsvalue": "",
-                "fsversion": "3.2.8",
+                "fsversion": "2.6.1",
                 "4gtv_auth": auth_val,
-                "Referer": "https://www.4gtv.tv/",
+                "X-Forwarded-For": "https://api2.4gtv.tv",
                 "User-Agent": ua
             }
             payload = {
@@ -209,7 +209,7 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
             resp.raise_for_status()
             data = resp.json()
             if data.get('Success') and 'flstURLs' in data.get('Data', {}):
-                url = data['Data']['flstURLs'][1]
+                url = data['Data']['flstURLs'][0]
                 # 更新緩存
                 cache_play_urls[cache_key] = (current_time, url)
                 return url
@@ -226,12 +226,12 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
 def get_highest_bitrate_url(master_url):
     """嘗試獲取更高質量的URL - 只對特定開頭的網址進行處理"""
     # 只對以 "4gtvfree-cds.cdn.hinet.net" 開頭的網址進行處理
-    if master_url.startswith("https://4gtvfree-mozai.4gtv.tv") and 'index.m3u8' in master_url:
+    if master_url.startswith("https://4gtvfree-cds.cdn.hinet.net") and 'index.m3u8' in master_url:
         print(f"   📶 嘗試獲取高質量URL (1080p)...")
         return master_url.replace('index.m3u8', '1080.m3u8')
     
     # 對於其他網址，保持原樣
-    print(f"   📶 使用原始URL (非https://4gtvfree-mozai.4gtv.tv)")
+    print(f"   📶 使用原始URL (非https://https://4gtvfree-cds.cdn.hinet.net)")
     return master_url
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
