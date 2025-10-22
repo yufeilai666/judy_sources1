@@ -27,12 +27,8 @@ log.disabled = True
 # 默認配置
 DEFAULT_USER_AGENT = "okhttp/4.9.2"
 DEFAULT_TIMEOUT = 30  # 增加超時時間
-CHANNEL_DELAY = 2  # 增加頻道之間的延遲時間（秒）
-MAX_RETRIES = 1  # 最大重試次數
-
-# 默認賬號(可被環境變量覆蓋)
-DEFAULT_USER = os.environ.get('GTV_USER', '')
-DEFAULT_PASS = os.environ.get('GTV_PASS', '')
+CHANNEL_DELAY = 1  # 增加頻道之間的延遲時間（秒）
+MAX_RETRIES = 2  # 最大重試次數
 
 # 代理設置 (從環境變量讀取)
 HTTP_PROXY = os.environ.get('http_proxy', '') or os.environ.get('HTTP_PROXY', '')
@@ -40,7 +36,7 @@ HTTPS_PROXY = os.environ.get('https_proxy', '') or os.environ.get('HTTPS_PROXY',
 
 # 記憶體緩存
 cache_play_urls = {}
-CACHE_EXPIRATION_TIME = 3600  # 1小時有效期
+CACHE_EXPIRATION_TIME = 86400  # 24小時有效期
 
 def is_github_actions():
     """檢查是否在 GitHub Actions 環境中運行"""
@@ -104,13 +100,12 @@ def create_scraper_with_proxy(ua):
     
     return scraper
 
-def generate_uuid(user):
-    """根據賬號和目前日期生成唯一 UUID，確保不同用戶每天 UUID 不同"""
-    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
-    name = f"{user}-{today}"
-    return str(uuid.uuid5(uuid.NAMESPACE_DNS, name)).upper()
+def generate_random_device_id():
+    """生成隨機設備ID"""
+    return str(uuid.uuid4()).upper()
 
 def generate_4gtv_auth():
+    """生成4GTV認證令牌"""
     head_key = "PyPJU25iI2IQCMWq7kblwh9sGCypqsxMp4sKjJo95SK43h08ff+j1nbWliTySSB+N67BnXrYv9DfwK+ue5wWkg=="
     KEY = b"ilyB29ZdruuQjC45JhBBR7o2Z8WJ26Vg"
     IV = b"JUMxvVMmszqUTeKn"
@@ -123,26 +118,8 @@ def generate_4gtv_auth():
     sha512 = hashlib.sha512((today + decrypted).encode()).digest()
     return base64.b64encode(sha512).decode()
 
-def sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout):
-    url = "https://api2.4gtv.tv/AppAccount/SignIn"
-    headers = {
-        "Content-Type": "application/json; charset=UTF-8",
-        "fsenc_key": fsenc_key,
-        "fsdevice": "Android",
-        "fsversion": "2.6.1",
-        "4gtv_auth": auth_val,
-        "User-Agent": ua
-    }
-    payload = {"fsUSER": user, "fsPASSWORD": password, "fsENC_KEY": fsenc_key}
-    scraper = create_scraper_with_proxy(ua)
-    
-    resp = scraper.post(url, headers=headers, json=payload, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("Data") if data.get("Success") else None
-
 def get_all_channels(ua, timeout):
-    """獲取所有頻道集合的頻道，並去除重複頻道"""
+    """獲取所有頻道集合的頻道，並剔除重複頻道"""
     channel_sets = [1, 4]  # 已知的頻道集合ID
     all_channels = []
     seen_channel_ids = set()  # 用於跟踪已看到的頻道ID
@@ -150,7 +127,12 @@ def get_all_channels(ua, timeout):
     for set_id in channel_sets:
         print(f"📡 正在獲取頻道集合 {set_id}...")
         url = f'https://api2.4gtv.tv/Channel/GetChannelBySetId/{set_id}/pc/L/V'
-        headers = {"accept": "*/*", "origin": "https://www.4gtv.tv", "referer": "https://www.4gtv.tv/", "User-AAgent": ua}
+        headers = {
+            "accept": "*/*", 
+            "origin": "https://www.4gtv.tv", 
+            "referer": "https://www.4gtv.tv/", 
+            "User-Agent": ua
+        }
         scraper = create_scraper_with_proxy(ua)
         
         try:
@@ -174,7 +156,7 @@ def get_all_channels(ua, timeout):
     
     return all_channels
 
-def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout, max_retries=MAX_RETRIES):
+def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, device_id, fsenc_key, auth_val, ua, timeout, max_retries=MAX_RETRIES):
     """帶重試機制的獲取頻道URL函數"""
     # 檢查緩存
     current_time = time.time()
@@ -190,16 +172,16 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
                 "content-type": "application/json; charset=utf-8",
                 "fsenc_key": fsenc_key,
                 "accept": "*/*",
-                "fsdevice": "Android",
-                "fsvalue": "",
-                "fsversion": "2.6.1",
+                "fsdevice": "iOS",
+                "fsvalue": device_id,
+                "fsversion": "3.2.8",
                 "4gtv_auth": auth_val,
-                "X-Forwarded-For": "https://api2.4gtv.tv",
+                "Referer": "https://www.4gtv.tv/",
                 "User-Agent": ua
             }
             payload = {
                 "fnCHANNEL_ID": fnCHANNEL_ID,
-                "clsAPP_IDENTITY_VALIDATE_ARUS": {"fsVALUE": fsVALUE, "fsENC_KEY": fsenc_key},
+                "clsAPP_IDENTITY_VALIDATE_ARUS": {"fsVALUE": device_id, "fsENC_KEY": fsenc_key},
                 "fsASSET_ID": channel_id,
                 "fsDEVICE_TYPE": "mobile"
             }
@@ -209,7 +191,7 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
             resp.raise_for_status()
             data = resp.json()
             if data.get('Success') and 'flstURLs' in data.get('Data', {}):
-                url = data['Data']['flstURLs'][1]
+                url = data['Data']['flstURLs'][0]
                 # 更新緩存
                 cache_play_urls[cache_key] = (current_time, url)
                 return url
@@ -225,13 +207,13 @@ def get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key
 
 def get_highest_bitrate_url(master_url):
     """嘗試獲取更高質量的URL - 只對特定開頭的網址進行處理"""
-    # 只對以 "4gtvfree-cds.cdn.hinet.net" 開頭的網址進行處理
-    if master_url.startswith("https://4gtvfree-mozai.4gtv.tv") and 'index.m3u8' in master_url:
+    # 只對以 "https://4gtvfree-cds.cdn.hinet.net" 開頭的網址進行處理
+    if master_url.startswith("https://4gtvfree-cds.cdn.hinet.net") and 'index.m3u8' in master_url:
         print(f"   📶 嘗試獲取高質量URL (1080p)...")
         return master_url.replace('index.m3u8', '1080.m3u8')
     
     # 對於其他網址，保持原樣
-    print(f"   📶 使用原始URL (非https://4gtvfree-mozai.4gtv.tv)")
+    print(f"   📶 使用原始URL (非4gtvfree-mozai域名)")
     return master_url
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', print_end="\r"):
@@ -255,21 +237,20 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     if iteration == total: 
         print()
 
-def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", delay=CHANNEL_DELAY):
-    """生成M3U播放清單"""
+def generate_m3u_playlist(ua, timeout, output_dir="playlist", delay=CHANNEL_DELAY):
+    """生成M3U播放清單 - 無需帳號登入"""
     try:
         # 建立輸出目錄
         os.makedirs(output_dir, exist_ok=True)
         
-        print("🔑 正在生成認證信息...")
-        # 生成認證信息
-        fsenc_key = generate_uuid(user)
+        print("🔑 正在生成隨機設備認證信息...")
+        # 生成隨機設備ID和認證信息
+        device_id = generate_random_device_id()
+        fsenc_key = generate_random_device_id()  # 使用另一個隨機ID作為加密密鑰
         auth_val = generate_4gtv_auth()
-        fsVALUE = sign_in_4gtv(user, password, fsenc_key, auth_val, ua, timeout)
         
-        if not fsVALUE:
-            print("❌ 登錄失敗")
-            return False
+        print(f"   📱 設備ID: {device_id}")
+        print(f"   🔑 加密密鑰: {fsenc_key}")
         
         print("📡 正在獲取頻道清單...")
         # 獲取所有頻道
@@ -317,14 +298,14 @@ def generate_m3u_playlist(user, password, ua, timeout, output_dir="playlist", de
             # 獲取頻道URL（帶重試機制）
             try:
                 print(f"   🔗 獲取頻道URL...")
-                stream_url = get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, fsVALUE, fsenc_key, auth_val, ua, timeout)
+                stream_url = get_4gtv_channel_url_with_retry(channel_id, fnCHANNEL_ID, device_id, fsenc_key, auth_val, ua, timeout)
                 if not stream_url:
                     print(f"   ❌ 無法獲取頻道 {channel_name} 的URL")
                     failed_channels += 1
                     failed_list.append((channel_name, "無法獲取URL"))
                     continue
                     
-                # 嘗試獲取更高質量的URL（僅對特定域名）
+                # 嘗試獲取更高質量的URL
                 highest_url = get_highest_bitrate_url(stream_url)
                 
                 # 添加到M3U內容
@@ -369,10 +350,8 @@ def main():
     """主函數，提供命令行界面"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='4GTV 流媒體獲取工具')
+    parser = argparse.ArgumentParser(description='4GTV 流媒體獲取工具 (無需帳號登入)')
     parser.add_argument('--generate-playlist', action='store_true', help='生成M3U播放清單')
-    parser.add_argument('--user', type=str, default=DEFAULT_USER, help='用戶名')
-    parser.add_argument('--password', type=str, default=DEFAULT_PASS, help='密碼')
     parser.add_argument('--ua', type=str, default=DEFAULT_USER_AGENT, help='用戶代理')
     parser.add_argument('--timeout', type=int, default=DEFAULT_TIMEOUT, help='超時時間(秒)')
     parser.add_argument('--output-dir', type=str, default="playlist", help='輸出目錄')
@@ -398,8 +377,6 @@ def main():
     
     if args.generate_playlist:
         success = generate_m3u_playlist(
-            args.user, 
-            args.password, 
             args.ua, 
             args.timeout, 
             args.output_dir, 
