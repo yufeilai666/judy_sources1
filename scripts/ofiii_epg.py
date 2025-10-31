@@ -19,202 +19,47 @@ HEADERS = {
 }
 
 def parse_channel_list():
-    """解析頻道清單檔案內容"""
-    channel_list = [
-        "nnews-zh",
-        "4gtv-4gtv009",
-        "4gtv-4gtv066",
-        "4gtv-4gtv040",
-        "4gtv-4gtv041",
-        "4gtv-4gtv051",
-        "4gtv-4gtv052",
-        "4gtv-4gtv074",
-        "4gtv-4gtv084",
-        "4gtv-4gtv085",
-        "4gtv-4gtv076",
-        "4gtv-4gtv102",
-        "4gtv-4gtv103",
-        "4gtv-4gtv104",
-        "4gtv-4gtv156",
-        "4gtv-4gtv158",
-        "litv-ftv16",
-        "litv-ftv17",
-        "litv-longturn01",
-        "litv-longturn02",
-        "litv-longturn03",
-        "litv-longturn11",
-        "litv-longturn12",
-        "litv-longturn14",
-        "litv-longturn18",
-        "litv-longturn19",
-        "litv-longturn20",
-        "litv-longturn21",
-        "litv-longturn22",
-        "iNEWS",
-        "daystar",
-        "ofiii13",
-        "ofiii16",
-        "ofiii22",
-        "ofiii23",
-        "ofiii24",
-        "ofiii31",
-        "ofiii32",
-        "ofiii36",
-        "ofiii38",
-        "ofiii39",
-        "ofiii1048",
-        "ofiii50",
-        "ofiii55",
-        "ofiii64",
-        "ofiii70",
-        "ofiii73",
-        "ofiii74",
-        "ofiii75",
-        "ofiii76",
-        "ofiii81",
-        "ofiii82",
-        "ofiii83",
-        "ofiii85",
-        "ofiii88",
-        "ofiii89",
-        "ofiii91",
-        "ofiii92",
-        "ofiii94",
-        "ofiii95",
-        "ofiii96",
-        "ofiii97",
-        "ofiii99",
-        "ofiii100",
-        "ofiii101",
-        "ofiii102",
-        "ofiii103",
-        "ofiii104",
-        "ofiii105",
-        "ofiii106",
-        "ofiii107",
-        "ofiii108",
-        "ofiii109",
-        "ofiii110",
-        "ofiii111",
-        "ofiii112",
-        "ofiii113",
-        "ofiii114",
-        "ofiii115",
-        "ofiii116",
-        "ofiii117",
-        "ofiii118",
-        "ofiii119",
-        "ofiii120",
-        "ofiii121",
-        "ofiii122",
-        "ofiii123",
-        "ofiii124",
-        "ofiii125",
-        "ofiii126",
-        "ofiii127",
-        "ofiii128",
-        "ofiii129",
-        "ofiii131",
-        "ofiii132",
-        "ofiii133",
-        "ofiii134",
-        "ofiii135",
-        "ofiii136",
-        "ofiii137",
-        "ofiii139",
-        "ofiii140",
-        "ofiii141",
-        "ofiii142",
-        "ofiii143",
-        "ofiii144",
-        "ofiii145",
-        "ofiii146",
-        "ofiii147",
-        "ofiii148",
-        "ofiii150",
-        "ofiii151",
-        "ofiii152",
-        "ofiii153",
-        "ofiii154",
-        "ofiii155",
-        "ofiii156",
-        "ofiii157",
-        "ofiii158",
-        "ofiii159",
-        "ofiii160",
-        "ofiii161",
-        "ofiii162",
-        "ofiii163",
-        "ofiii164",
-        "ofiii165",
-        "ofiii166",
-        "ofiii167",
-        "ofiii168",
-        "ofiii169",
-        "ofiii170",
-        "ofiii171",
-        "ofiii172",
-        "ofiii173",
-        "ofiii174",
-        "ofiii175",
-        "ofiii177",
-        "ofiii178",
-        "ofiii179",
-        "ofiii180",
-        "ofiii182",
-        "ofiii183",
-        "ofiii184",
-        "ofiii185",
-        "ofiii186",
-        "ofiii187",
-        "ofiii192",
-        "ofiii195",
-        "ofiii196",
-        "ofiii198",
-        "ofiii200",
-        "ofiii201",
-        "ofiii202",
-        "ofiii203",
-        "ofiii204",
-        "ofiii205",
-        "ofiii206",
-        "ofiii207",
-        "ofiii208",
-        "ofiii209",
-        "ofiii210",
-        "ofiii211",
-        "ofiii212",
-        "ofiii215",
-        "ofiii216",
-        "ofiii217",
-        "ofiii218",
-        "ofiii225",
-        "ofiii226",
-        "ofiii227",
-        "ofiii228",
-        "ofiii234",
-        "ofiii235",
-        "ofiii236",
-        "ofiii237",
-        "ofiii238",
-        "ofiii239",
-        "ofiii240",
-        "ofiii241",
-        "ofiii242",
-        "ofiii243",
-        "ofiii244",
-        "ofiii245",
-        "ofiii246",
-        "ofiii247",
-        "ofiii248",
-        "ofiii250",
-        "ofiii251",
-        "ofiii252",
-        "ofiii254",
-        "ofiii255"
-    ]
+    """从网页动态解析频道清单"""
+    url = "https://www.ofiii.com/channel/watch/4gtv-4gtv066"
     
-    return channel_list
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=30)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # 查找包含所有频道的容器
+        all_section = soup.find('div', class_='all_section')
+        if not all_section:
+            print("❌ 未找到频道列表容器")
+            return []
+        
+        # 查找所有的频道链接
+        channel_links = all_section.find_all('a', href=True)
+        if not channel_links:
+            print("❌ 未找到频道链接")
+            return []
+        
+        channel_list = []
+        for link in channel_links:
+            try:
+                href = link.get('href', '')
+                # 提取频道ID（/channel/watch/后面的部分）
+                if '/channel/watch/' in href:
+                    channel_id = href.split('/channel/watch/')[-1].strip('/')
+                    if channel_id and channel_id not in channel_list:
+                        channel_list.append(channel_id)
+                        print(f"✅ 找到频道: {channel_id}")
+            except Exception as e:
+                print(f"⚠️ 解析频道链接失败: {str(e)}")
+                continue
+        
+        print(f"✅ 成功解析 {len(channel_list)} 个频道")
+        return channel_list
+        
+    except Exception as e:
+        print(f"❌ 动态获取频道列表失败: {str(e)}")
+        return []
 
 def fetch_epg_data(channel_id, max_retries=3):
     """獲取指定頻道的電視節目表數據"""
