@@ -1,25 +1,31 @@
-name: Daily litv EPG Update
+name: Daily LiTV EPG Update
 
 on:
   schedule:
-    - cron: '0 20 * * *'
-  workflow_dispatch:
-
-env:
-  HTTP_PROXY: ${{ secrets.HTTP_PROXY }}
-  HTTPS_PROXY: ${{ secrets.HTTPS_PROXY }}
-  http_proxy: ${{ secrets.HTTP_PROXY }}
-  https_proxy: ${{ secrets.HTTPS_PROXY }}
+    - cron: '0 20 * * *'  # 每天 UTC 20:00 (台灣時間次日 04:00)
+  workflow_dispatch:       # 允許手動觸發
+  push:
+    branches: [ main ]
+    paths:
+      - 'scripts/litv_epg.py'
 
 jobs:
   generate-epg:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
+    env:
+      HTTP_PROXY: ${{ secrets.HTTP_PROXY }}
+      HTTPS_PROXY: ${{ secrets.HTTPS_PROXY }}
+      http_proxy: ${{ secrets.HTTP_PROXY }}
+      https_proxy: ${{ secrets.HTTPS_PROXY }}
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -43,29 +49,38 @@ jobs:
       
     - name: Generate EPG and JSON
       run: |
-        echo "開始生成EPG數據..."
+        echo "開始生成LiTV EPG數據..."
         python scripts/litv_epg.py --output output/litv.xml --json output/litv.json
         echo "EPG和JSON生成完成"
         
-    - name: Debug - List files
+    - name: Validate generated files
       run: |
-        echo "當前目錄內容:"
-        ls -la
+        echo "檢查生成的文件..."
+        if [ -f "output/litv.xml" ]; then
+          echo "✅ XML文件已生成，大小: $(wc -c < output/litv.xml) bytes"
+          echo "前幾行預覽:"
+          head -5 output/litv.xml
+        else
+          echo "❌ XML文件未生成"
+          exit 1
+        fi
+        
+        if [ -f "output/litv.json" ]; then
+          echo "✅ JSON文件已生成，大小: $(wc -c < output/litv.json) bytes"
+          echo "JSON文件結構:"
+          jq length output/litv.json && echo "個頻道" || echo "無法解析JSON"
+        else
+          echo "❌ JSON文件未生成"
+          exit 1
+        fi
+        
+    - name: List output files
+      run: |
         echo "輸出目錄內容:"
         ls -la output/
-        echo "檢查生成的文件:"
-        if [ -f "output/litv.xml" ]; then
-          echo "XML文件大小: $(wc -l < output/litv.xml) 行"
-        else
-          echo "XML文件未生成"
-        fi
-        if [ -f "output/litv.json" ]; then
-          echo "JSON文件大小: $(wc -l < output/litv.json) 行"
-          echo "JSON文件預覽:"
-          head -20 output/litv.json
-        else
-          echo "JSON文件未生成"
-        fi
+        echo "文件詳細信息:"
+        file output/litv.xml
+        file output/litv.json
         
     - name: Commit and push changes
       if: success()
@@ -79,6 +94,15 @@ jobs:
         if git diff-index --quiet HEAD --; then
           echo "沒有變化可提交"
         else
-          git commit -m "Auto-update LiTV EPG data (output/litv.xml and output/litv.json)"
+          git commit -m "Auto-update LiTV EPG data [$(date +'%Y-%m-%d %H:%M')]"
           git push
+          echo "✅ 已提交並推送更新"
         fi
+        
+    - name: Upload EPG files as artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: litv-epg-files
+        path: output/
+        retention-days: 7
