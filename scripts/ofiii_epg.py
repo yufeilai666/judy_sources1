@@ -20,7 +20,8 @@ HEADERS = {
 
 def parse_channel_list():
     """从网页动态解析频道清单"""
-    url = "https://www.ofiii.com/channel/watch/4gtv-4gtv066"
+    # 尝试使用频道列表页面
+    url = "https://www.ofiii.com/channel"
     
     try:
         response = requests.get(url, headers=HEADERS, timeout=30)
@@ -28,35 +29,19 @@ def parse_channel_list():
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 尝试查找包含所有频道的容器 - 使用多种可能的选择器
-        all_section = None
+        # 方法1: 从__NEXT_DATA__中解析
+        script_tag = soup.find('script', id='__NEXT_DATA__')
+        if script_tag and script_tag.string:
+            try:
+                data = json.loads(script_tag.string)
+                # 这里需要根据实际数据结构来提取频道列表
+                # 由于我们不知道结构，可以先打印一部分数据来查看
+                # 但是为了不使代码复杂，我们暂时跳过，直接使用方法2
+            except json.JSONDecodeError:
+                pass
         
-        # 尝试直接通过class查找
-        all_section = soup.find('div', class_='all_section')
-        
-        # 如果没找到，尝试通过id查找_next然后逐层查找
-        if not all_section:
-            next_div = soup.find('div', id='_next')
-            if next_div:
-                # 尝试查找包含"所有频道"或类似文本的容器
-                all_section = next_div.find('div', class_=re.compile(r'.*section.*'))
-        
-        # 如果还是没找到，尝试查找所有包含频道链接的区域
-        if not all_section:
-            # 查找所有包含"/channel/watch/"的链接
-            all_links = soup.find_all('a', href=re.compile(r'/channel/watch/'))
-            if all_links:
-                # 创建一个虚拟容器包含所有找到的链接
-                all_section = soup.new_tag('div')
-                for link in all_links:
-                    all_section.append(link)
-        
-        if not all_section:
-            print("❌ 未找到频道列表容器")
-            return []
-        
-        # 查找所有的频道链接
-        channel_links = all_section.find_all('a', href=re.compile(r'/channel/watch/'))
+        # 方法2: 从HTML中解析所有频道链接
+        channel_links = soup.find_all('a', href=re.compile(r'/channel/watch/'))
         if not channel_links:
             print("❌ 未找到频道链接")
             return []
