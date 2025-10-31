@@ -13,7 +13,9 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-      
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -34,25 +36,38 @@ jobs:
         python scripts/ofiii_epg.py --output output/ofiii.xml
         echo "EPG生成完成"
         
-    - name: Debug - List files
+    - name: Verify generated files
       run: |
-        echo "當前目錄內容:"
-        ls -la
-        echo "輸出目錄內容:"
-        ls -la output
+        echo "檢查生成的文件:"
+        ls -la output/
+        echo "XML 文件大小: $(wc -c < output/ofiii.xml) 字節"
+        if [ -f "output/ofiii.json" ]; then
+          echo "JSON 文件大小: $(wc -c < output/ofiii.json) 字節"
+          echo "JSON 文件前幾個字符:"
+          head -c 200 output/ofiii.json
+        else
+          echo "❌ JSON 文件未生成"
+          exit 1
+        fi
         
-    - name: Commit and push changes
-      if: success()
+    - name: Configure Git
       run: |
         git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git config --local user.name "GitHub Actions"
         
-        # 檢查是否有變化
-        git add output/ofiii.xml
+    - name: Commit and push EPG data
+      run: |
+        # 添加生成的檔案
+        git add output/ofiii.xml output/ofiii.json
         
-        if git diff-index --quiet HEAD --; then
-          echo "沒有變化可提交"
+        # 檢查是否有變更
+        if git diff --staged --quiet; then
+          echo "沒有EPG數據變更"
         else
-          git commit -m "Auto-update EPG data (output)"
+          # 提交變更
+          git commit -m "Auto-update EPG data [$(date +'%Y-%m-%d %H:%M')]"
+          
+          # 推送變更
           git push
+          echo "✅ EPG數據已成功更新並推送"
         fi
