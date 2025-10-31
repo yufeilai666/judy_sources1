@@ -19,9 +19,9 @@ HEADERS = {
 }
 
 def parse_channel_list():
-    """從網頁動態解析頻道清單"""
-    # 嘗試使用頻道列表頁面
-    url = "https://www.ofiii.com/channel/4gtv-4gtv066"
+    """从网页动态解析频道清单"""
+    # 尝试使用频道列表页面
+    url = "https://www.ofiii.com/channel"
     
     try:
         response = requests.get(url, headers=HEADERS, timeout=30)
@@ -29,42 +29,107 @@ def parse_channel_list():
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 方法1: 從__NEXT_DATA__中解析
+        # 方法1: 从__NEXT_DATA__中解析
         script_tag = soup.find('script', id='__NEXT_DATA__')
         if script_tag and script_tag.string:
             try:
                 data = json.loads(script_tag.string)
-                # 這里需要根據實際數據結構來提取頻道列表
-                # 由於我們不知道結構，可以先打印一部分數據來查看
-                # 但是為了不使代碼覆雜，我們暫時跳過，直接使用方法2
-            except json.JSONDecodeError:
-                pass
+                channels_from_next_data = extract_channels_from_next_data(data)
+                if channels_from_next_data:
+                    print(f"✅ 从__NEXT_DATA__解析到 {len(channels_from_next_data)} 个频道")
+                    return channels_from_next_data
+            except json.JSONDecodeError as e:
+                print(f"⚠️ __NEXT_DATA__ JSON解析失败: {str(e)}")
         
-        # 方法2: 從HTML中解析所有頻道鏈接
+        # 方法2: 从HTML中解析所有频道链接
         channel_links = soup.find_all('a', href=re.compile(r'/channel/watch/'))
         if not channel_links:
-            print("❌ 未找到頻道鏈接")
+            print("❌ 未找到频道链接")
             return []
         
         channel_list = []
         for link in channel_links:
             try:
                 href = link.get('href', '')
-                # 提取頻道ID（/channel/watch/後面的部分）
+                # 提取频道ID（/channel/watch/后面的部分）
                 if '/channel/watch/' in href:
                     channel_id = href.split('/channel/watch/')[-1].strip('/')
                     if channel_id and channel_id not in channel_list:
                         channel_list.append(channel_id)
             except Exception as e:
-                print(f"⚠️ 解析頻道鏈接失敗: {str(e)}")
+                print(f"⚠️ 解析频道链接失败: {str(e)}")
                 continue
         
-        print(f"✅ 成功解析 {len(channel_list)} 個頻道")
+        print(f"✅ 从HTML链接解析到 {len(channel_list)} 个频道")
         return channel_list
         
     except Exception as e:
-        print(f"❌ 動態獲取頻道列表失敗: {str(e)}")
+        print(f"❌ 动态获取频道列表失败: {str(e)}")
         return []
+
+def extract_channels_from_next_data(data):
+    """从__NEXT_DATA__中提取频道列表"""
+    channels = []
+    
+    try:
+        # 尝试从Next.js的数据结构中提取频道信息
+        # 常见的结构可能是 props.pageProps.channels 或类似
+        props = data.get('props', {})
+        page_props = props.get('pageProps', {})
+        
+        # 尝试不同的可能字段名
+        channels_data = (
+            page_props.get('channels') or 
+            page_props.get('channelList') or 
+            page_props.get('items') or
+            page_props.get('data') or
+            []
+        )
+        
+        # 如果channels_data是列表，遍历提取频道ID
+        if isinstance(channels_data, list):
+            for channel in channels_data:
+                # 尝试不同的ID字段名
+                channel_id = (
+                    channel.get('id') or 
+                    channel.get('channelId') or 
+                    channel.get('slug') or
+                    channel.get('code')
+                )
+                if channel_id and channel_id not in channels:
+                    channels.append(channel_id)
+        
+        # 如果没有找到，尝试搜索整个数据结构
+        if not channels:
+            channels = search_channels_in_data(data)
+            
+    except Exception as e:
+        print(f"⚠️ 从__NEXT_DATA__提取频道失败: {str(e)}")
+    
+    return channels
+
+def search_channels_in_data(data, max_depth=3):
+    """在数据结构中递归搜索频道ID"""
+    channels = []
+    
+    def _search(obj, depth=0):
+        if depth > max_depth:
+            return
+        
+        if isinstance(obj, dict):
+            # 检查是否有看起来像频道ID的字段
+            for key, value in obj.items():
+                if key in ['id', 'channelId', 'slug', 'code'] and isinstance(value, str):
+                    if value not in channels and ('4gtv' in value or 'litv' in value or 'ofiii' in value):
+                        channels.append(value)
+                else:
+                    _search(value, depth + 1)
+        elif isinstance(obj, list):
+            for item in obj:
+                _search(item, depth + 1)
+    
+    _search(data)
+    return channels
 
 def fetch_epg_data(channel_id, max_retries=3):
     """獲取指定頻道的電視節目表數據"""
