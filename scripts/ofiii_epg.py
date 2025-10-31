@@ -375,11 +375,13 @@ def get_channel_info(json_data, channel_id):
         # 獲取頻道名稱
         channel_name = channel_data.get('title', channel_id)
         
-        # 獲取頻道logo - 直接使用獲取的值，不再做多餘處理
+        # 獲取頻道logo
         logo = channel_data.get('picture', '')
         if logo and not logo.startswith("http"):
             logo = f"https://p-cdnstatic.svc.litv.tv/{logo}"
-        # 移除了將 '_tv' 替換為 '_mobile' 的步驟
+            # 將logo路徑中的_tv替換為_mobile以獲取移動版logo
+            if '_tv' in logo:
+                logo = logo.replace('_tv', '_mobile')
         
         # 獲取頻道描述
         description = channel_data.get('description', '')
@@ -469,6 +471,10 @@ def generate_xmltv(channels_info, programs, output_file="ofiii.xml"):
         
         if channel.get('logo'):
             ET.SubElement(channel_elem, "icon", src=channel['logo'])
+        
+        # 添加頻道描述到XMLTV
+        if channel.get('description'):
+            ET.SubElement(channel_elem, "desc", lang="zh").text = channel['description']
     
     # 添加節目
     program_count = 0
