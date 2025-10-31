@@ -43,7 +43,7 @@ def create_session():
     return session
 
 def parse_channel_list(session):
-    """從LiTV API獲取頻道清單"""
+    """從LiTV API獲取頻道清單，只抓取特定ID模式的頻道"""
     print("開始獲取LiTV頻道清單...")
     
     # LiTV頻道API
@@ -65,12 +65,30 @@ def parse_channel_list(session):
         
         print(f"找到 {len(channels_data)} 個頻道")
         
+        # 定義要抓取的頻道ID模式
+        target_patterns = [
+            r'^4gtv-4gtv.*',      # 4gtv-4gtv開頭的所有頻道
+            r'^litv-ftv.*',       # litv-ftv開頭的所有頻道
+            r'^iNEWS$',           # 精確匹配iNEWS
+            r'^litv-longturn.*'   # litv-longturn開頭的所有頻道
+        ]
+        
         channels = []
         for channel in channels_data:
             channel_name = channel.get('title', '').strip()
             channel_id = channel.get('cdn_code', '').strip()
             
             if not channel_name or not channel_id:
+                continue
+            
+            # 檢查頻道ID是否符合目標模式
+            is_target = False
+            for pattern in target_patterns:
+                if re.match(pattern, channel_id):
+                    is_target = True
+                    break
+            
+            if not is_target:
                 continue
                 
             # 處理logo URL
@@ -86,7 +104,7 @@ def parse_channel_list(session):
                 "content_type": channel.get('content_type', 'channel')
             })
         
-        print(f"✅ 成功獲取 {len(channels)} 個頻道")
+        print(f"✅ 成功獲取 {len(channels)} 個目標頻道")
         return channels
         
     except Exception as e:
@@ -95,105 +113,102 @@ def parse_channel_list(session):
         traceback.print_exc()
         return []
 
-def fetch_epg_data(session):
-    """從LiTV API獲取節目表數據"""
-    print("開始獲取LiTV節目表數據...")
+def fetch_channel_epg(session, channel_id, channel_name):
+    """從頻道頁面獲取節目表數據"""
+    print(f"開始獲取頻道 {channel_name} 的節目表...")
     
-    # LiTV節目表API
-    epg_url = "https://www.litv.tv/_next/data/322e31352e3138/index.json"
+    # 頻道頁面URL
+    channel_url = f"https://www.litv.tv/channel/watch/{channel_id}"
     
     try:
-        response = session.get(epg_url, timeout=30)
+        response = session.get(channel_url, timeout=30)
         response.raise_for_status()
         
-        data = response.json()
-        print(f"獲取的節目表數據結構: {list(data.keys())}")
-        return data
+        # 解析HTML
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-    except Exception as e:
-        print(f"❌ 獲取節目表數據失敗: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-def parse_epg_data(epg_json, channels_info):
-    """解析LiTV節目表數據"""
-    if not epg_json:
-        return []
-    
-    programs = []
-    
-    try:
-        # 從 pageProps.homeChannel.list 獲取節目表
-        channel_list = epg_json.get('pageProps', {}).get('homeChannel', {}).get('list', [])
-        
-        if not channel_list:
-            print("❌ 未找到節目表數據")
+        # 查找節目表容器
+        epg_container = soup.find('div', class_='grow overflow-y-auto')
+        if not epg_container:
+            print(f"⚠️ 頻道 {channel_name} 未找到節目表容器")
             return []
         
-        print(f"找到 {len(channel_list)} 個頻道的節目表")
+        programs = []
+        current_date = None
+        current_datetime = None
         
-        for channel_data in channel_list:
-            channel_id = channel_data.get('contentId', '')
-            schedule = channel_data.get('schedule', [])
-            
-            if not channel_id:
-                continue
+        # 遍歷所有子元素
+        for child in epg_container.children:
+            if hasattr(child, 'get') and child.get('class'):
+                classes = child.get('class', [])
                 
-            # 查找對應的頻道名稱
-            channel_name = None
-            for channel in channels_info:
-                if channel['id'] == channel_id:
-                    channel_name = channel['channelName']
-                    break
-            
-            if not channel_name:
-                # 如果找不到對應頻道，使用API返回的標題
-                channel_name = channel_data.get('title', f"未知頻道-{channel_id}")
-                print(f"⚠️ 頻道ID {channel_id} 不在頻道列表中，使用API標題: {channel_name}")
-            
-            print(f"處理頻道 {channel_name} 的 {len(schedule)} 個節目")
-            
-            # 解析該頻道的節目表
-            for schedule_item in schedule:
-                program_data = schedule_item.get('program', {})
-                air_datetime = schedule_item.get('airDateTime', '')
+                # 檢查是否是日期標題
+                if 'pl-[10px]' in classes and 'pr-[10px]' in classes and 'text-[15px]' in classes and 'text-[#fff]' in classes and 'leading-[40px]' in classes:
+                    date_text = child.get_text(strip=True)
+                    print(f"找到日期標題: {date_text}")
+                    
+                    # 解析日期
+                    date_parts = date_text.split(' / ')
+                    if len(date_parts) >= 2:
+                        date_str = date_parts[1]  # 例如 "11月1日"
+                        # 將日期轉換為當前年份的完整日期
+                        current_year = datetime.datetime.now().year
+                        try:
+                            # 解析 "月日" 格式
+                            month_day_match = re.search(r'(\d+)月(\d+)日', date_str)
+                            if month_day_match:
+                                month = int(month_day_match.group(1))
+                                day = int(month_day_match.group(2))
+                                current_datetime = datetime.datetime(current_year, month, day, tzinfo=TAIPEI_TZ)
+                                current_date = f"{month}月{day}日"
+                                print(f"解析日期: {current_year}-{month}-{day}")
+                        except Exception as e:
+                            print(f"⚠️ 日期解析失敗: {date_str}, {str(e)}")
+                            current_date = None
+                            current_datetime = None
                 
-                if not air_datetime:
-                    continue
-                
-                try:
-                    # 解析UTC時間
-                    start_utc = datetime.datetime.strptime(
-                        air_datetime, "%Y-%m-%dT%H:%M:%SZ"
-                    ).replace(tzinfo=pytz.utc)
+                # 檢查是否是節目行
+                elif 'pl-[10px]' in classes and 'pr-[10px]' in classes and 'w-[100%]' in classes and 'h-[40px]' in classes and 'flex' in classes and 'items-center' in classes:
+                    if not current_datetime:
+                        continue
                     
-                    # 轉換為台北時區
-                    start_taipei = start_utc.astimezone(TAIPEI_TZ)
-                    
-                    # 預設節目時長為1小時
-                    duration = datetime.timedelta(hours=1)
-                    end_taipei = start_taipei + duration
-                    
-                    programs.append({
-                        "channelName": channel_name,
-                        "programName": program_data.get('title', '未知節目'),
-                        "description": program_data.get('subTitle', ''),
-                        "subtitle": program_data.get('subTitle', ''),
-                        "start": start_taipei,
-                        "end": end_taipei
-                    })
-                    
-                except ValueError as e:
-                    print(f"⚠️ 時間格式解析失敗: {air_datetime}, {str(e)}")
-                    continue
-                
+                    # 查找節目時間和名稱
+                    program_div = child.find('div', class_=lambda x: x and 'pl-[10px]' in x and 'grow' in x and 'text-[15px]' in x and 'leading-[30px]' in x)
+                    if program_div:
+                        program_text = program_div.get_text(strip=True)
+                        if program_text:
+                            # 解析時間和節目名稱 (格式: "HH:MM 節目名稱")
+                            time_match = re.match(r'(\d{1,2}):(\d{2})\s+(.+)', program_text)
+                            if time_match:
+                                hour = int(time_match.group(1))
+                                minute = int(time_match.group(2))
+                                program_name = time_match.group(3)
+                                
+                                # 計算節目開始時間
+                                program_start = current_datetime.replace(hour=hour, minute=minute, second=0)
+                                
+                                # 預設節目時長為1小時
+                                program_end = program_start + datetime.timedelta(hours=1)
+                                
+                                programs.append({
+                                    "channelName": channel_name,
+                                    "programName": program_name,
+                                    "description": "",
+                                    "subtitle": "",
+                                    "start": program_start,
+                                    "end": program_end
+                                })
+                                
+                                print(f"  節目: {hour:02d}:{minute:02d} - {program_name}")
+        
+        print(f"✅ 頻道 {channel_name} 獲取到 {len(programs)} 個節目")
+        return programs
+        
     except Exception as e:
-        print(f"❌ 解析節目表數據失敗: {str(e)}")
+        print(f"❌ 獲取頻道 {channel_name} 節目表失敗: {str(e)}")
         import traceback
         traceback.print_exc()
-    
-    return programs
+        return []
 
 def get_litv_epg():
     """獲取LiTV電視節目表"""
@@ -210,14 +225,18 @@ def get_litv_epg():
         print("❌ 無法獲取頻道清單")
         return [], [], []  # 返回三個空列表
     
-    # 獲取節目表數據
-    epg_json = fetch_epg_data(session)
-    if not epg_json:
-        print("❌ 無法獲取節目表數據")
-        return channels_info, [], []  # 返回頻道資訊和兩個空列表
-    
-    # 解析節目數據
-    programs = parse_epg_data(epg_json, channels_info)
+    # 為每個頻道獲取節目表
+    all_programs = []
+    for channel in channels_info:
+        channel_id = channel["id"]
+        channel_name = channel["channelName"]
+        
+        # 獲取該頻道的節目表
+        programs = fetch_channel_epg(session, channel_id, channel_name)
+        all_programs.extend(programs)
+        
+        # 添加隨機延遲，避免請求過於頻繁
+        time.sleep(random.uniform(1, 3))
     
     # 格式化頻道資訊（用於XMLTV生成）
     all_channels = []
@@ -240,18 +259,18 @@ def get_litv_epg():
     # 統計結果
     print("\n" + "="*50)
     print(f"✅ 成功獲取 {len(all_channels)} 個頻道")
-    print(f"✅ 成功獲取 {len(programs)} 個節目")
+    print(f"✅ 成功獲取 {len(all_programs)} 個節目")
     
     # 按頻道名稱分組顯示節目數量
     channel_counts = {}
-    for program in programs:
+    for program in all_programs:
         channel_counts[program["channelName"]] = channel_counts.get(program["channelName"], 0) + 1
     
     for channel, count in channel_counts.items():
         print(f"📺 頻道 {channel}: {count} 個節目")
     
     print("="*50)
-    return channels_info, all_channels, programs  # 返回三個值
+    return channels_info, all_channels, all_programs  # 返回三個值
 
 def generate_xmltv(channels, programs, output_file="litv.xml"):
     """生成XMLTV格式的EPG數據"""
