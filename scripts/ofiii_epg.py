@@ -375,13 +375,11 @@ def get_channel_info(json_data, channel_id):
         # 獲取頻道名稱
         channel_name = channel_data.get('title', channel_id)
         
-        # 獲取頻道logo
+        # 獲取頻道logo - 直接使用獲取的值，不再做多餘處理
         logo = channel_data.get('picture', '')
         if logo and not logo.startswith("http"):
             logo = f"https://p-cdnstatic.svc.litv.tv/{logo}"
-            # 將logo路徑中的_tv替換為_mobile以獲取移動版logo
-            if '_tv' in logo:
-                logo = logo.replace('_tv', '_mobile')
+        # 移除了將 '_tv' 替換為 '_mobile' 的步驟
         
         # 獲取頻道描述
         description = channel_data.get('description', '')
