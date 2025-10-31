@@ -19,6 +19,17 @@ def get_channel_data(channel_id):
         print(f"❌ 獲取頻道 {channel_id} 資料失敗: {e}")
         return None
 
+def get_display_name(title, subtitle):
+    """根據標題和副標題生成顯示名稱"""
+    if title and subtitle:
+        return f"{title}-{subtitle}"
+    elif title and not subtitle:
+        return title
+    elif not title and subtitle:
+        return subtitle
+    else:
+        return "未知節目"
+
 def generate_m3u_content(channel_data, channel_id):
     """生成M3U內容"""
     m3u_lines = []
@@ -54,8 +65,11 @@ def generate_m3u_content(channel_data, channel_id):
             if not asset_id:
                 continue
                 
+            # 生成顯示名稱
+            display_name = get_display_name(title, subtitle)
+            
             # 生成M3U條目
-            extinf_line = f'#EXTINF:-1 tvg-id="{name}" tvg-name="{name}" tvg-logo="https://p-cdnstatic.svc.litv.tv/{picture}" group-title="{name}",{title}-{subtitle}'
+            extinf_line = f'#EXTINF:-1 tvg-id="{name}" tvg-name="{name}" tvg-logo="https://p-cdnstatic.svc.litv.tv/{picture}" group-title="{name}",{display_name}'
             url_line = f'http://localhost:5050/play/{content_id}&{asset_id}/index.m3u8'
             
             m3u_lines.append(extinf_line)
@@ -75,7 +89,7 @@ def ensure_output_dir():
 def main():
     # 確保輸出目錄存在
     output_dir = ensure_output_dir()
-    output_file = output_dir / 'ofiii.m3u'
+    output_file = output_dir / 'playlist.m3u'
     
     # 頻道ID列表
     channel_ids = [
@@ -111,6 +125,7 @@ def main():
     successful_channels = 0
     failed_channels = 0
     skipped_channels = 0
+    total_programs = 0
     
     # 遍歷所有頻道ID
     for i, channel_id in enumerate(channel_ids, 1):
@@ -126,7 +141,9 @@ def main():
             if channel_lines:
                 m3u_content.extend(channel_lines)
                 successful_channels += 1
-                print(f"✅ 成功添加頻道 {channel_id}")
+                program_count = len(channel_lines) // 2  # 每2行一個節目
+                total_programs += program_count
+                print(f"✅ 成功添加頻道 {channel_id} ({program_count} 個節目)")
             else:
                 skipped_channels += 1
         else:
@@ -144,6 +161,7 @@ def main():
     print(f"   ✅ 成功處理: {successful_channels} 個頻道")
     print(f"   ⚠️  跳過處理: {skipped_channels} 個頻道 (無節目)")
     print(f"   ❌ 處理失敗: {failed_channels} 個頻道")
+    print(f"   📺 總節目數: {total_programs} 個節目")
     print(f"   📁 輸出位置: {output_file}")
 
 if __name__ == "__main__":
