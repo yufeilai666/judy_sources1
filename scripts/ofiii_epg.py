@@ -28,14 +28,35 @@ def parse_channel_list():
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 查找包含所有频道的容器
+        # 尝试查找包含所有频道的容器 - 使用多种可能的选择器
+        all_section = None
+        
+        # 尝试直接通过class查找
         all_section = soup.find('div', class_='all_section')
+        
+        # 如果没找到，尝试通过id查找_next然后逐层查找
+        if not all_section:
+            next_div = soup.find('div', id='_next')
+            if next_div:
+                # 尝试查找包含"所有频道"或类似文本的容器
+                all_section = next_div.find('div', class_=re.compile(r'.*section.*'))
+        
+        # 如果还是没找到，尝试查找所有包含频道链接的区域
+        if not all_section:
+            # 查找所有包含"/channel/watch/"的链接
+            all_links = soup.find_all('a', href=re.compile(r'/channel/watch/'))
+            if all_links:
+                # 创建一个虚拟容器包含所有找到的链接
+                all_section = soup.new_tag('div')
+                for link in all_links:
+                    all_section.append(link)
+        
         if not all_section:
             print("❌ 未找到频道列表容器")
             return []
         
         # 查找所有的频道链接
-        channel_links = all_section.find_all('a', href=True)
+        channel_links = all_section.find_all('a', href=re.compile(r'/channel/watch/'))
         if not channel_links:
             print("❌ 未找到频道链接")
             return []
@@ -49,7 +70,6 @@ def parse_channel_list():
                     channel_id = href.split('/channel/watch/')[-1].strip('/')
                     if channel_id and channel_id not in channel_list:
                         channel_list.append(channel_id)
-                        print(f"✅ 找到频道: {channel_id}")
             except Exception as e:
                 print(f"⚠️ 解析频道链接失败: {str(e)}")
                 continue
