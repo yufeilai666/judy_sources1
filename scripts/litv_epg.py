@@ -56,14 +56,11 @@ def parse_channel_list(session):
         data = response.json()
         print(f"獲取的頻道數據結構: {list(data.keys())}")
         
-        # 嘗試不同的數據結構路徑
-        channels_data = None
-        if 'pageProps' in data and 'channels' in data['pageProps']:
-            channels_data = data['pageProps']['channels']
-        elif 'channels' in data:
-            channels_data = data['channels']
-        else:
-            print(f"未知的數據結構: {data}")
+        # 從 pageProps.introduction.channels 獲取頻道列表
+        channels_data = data.get('pageProps', {}).get('introduction', {}).get('channels', [])
+        
+        if not channels_data:
+            print("❌ 未找到頻道數據")
             return []
         
         print(f"找到 {len(channels_data)} 個頻道")
@@ -127,14 +124,11 @@ def parse_epg_data(epg_json, channels_info):
     programs = []
     
     try:
-        # 嘗試不同的數據結構路徑
-        channel_list = None
-        if 'pageProps' in epg_json and 'list' in epg_json['pageProps']:
-            channel_list = epg_json['pageProps']['list']
-        elif 'list' in epg_json:
-            channel_list = epg_json['list']
-        else:
-            print(f"未知的節目表數據結構: {epg_json}")
+        # 從 pageProps.homeChannel.list 獲取節目表
+        channel_list = epg_json.get('pageProps', {}).get('homeChannel', {}).get('list', [])
+        
+        if not channel_list:
+            print("❌ 未找到節目表數據")
             return []
         
         print(f"找到 {len(channel_list)} 個頻道的節目表")
