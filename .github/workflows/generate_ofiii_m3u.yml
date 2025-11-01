@@ -28,7 +28,7 @@ jobs:
     - name: Generate M3U playlist and channel data
       run: |
         cd scripts
-        python generate_m3u.py
+        python generate_ofiii_m3u.py
         
     - name: Commit and push if changed
       run: |
