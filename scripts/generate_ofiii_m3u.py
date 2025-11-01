@@ -151,7 +151,7 @@ def main():
     
     # 頻道ID列表
     channel_ids = [
-        "daystar","ofiii13","ofiii16","ofiii22","ofiii23","ofiii24","ofiii31","ofiii32",
+        "ofiii13","ofiii16","ofiii22","ofiii23","ofiii24","ofiii31","ofiii32",
         "ofiii36","ofiii38","ofiii39","ofiii1048","ofiii50","ofiii55","ofiii64","ofiii70",
         "ofiii73","ofiii74","ofiii75","ofiii76","ofiii81","ofiii82","ofiii83","ofiii85",
         "ofiii88","ofiii89","ofiii91","ofiii92","ofiii94","ofiii95","ofiii96","ofiii97",
