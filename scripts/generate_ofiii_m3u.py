@@ -143,11 +143,21 @@ def remove_duplicate_channels(channel_data):
     
     return result
 
+def generate_playout_channel_json(channel_ids):
+    """生成ofiii_playout-channel.json檔案"""
+    playout_data = {}
+    
+    for channel_id in channel_ids:
+        playout_data[channel_id] = ["ofiii", channel_id]
+    
+    return playout_data
+
 def main():
     # 確保輸出目錄存在
     output_dir = ensure_output_dir()
     m3u_file = output_dir / 'ofiii.m3u'
-    channel_json_file = output_dir / 'channel.json'
+    channel_json_file = output_dir / 'ofiii_channel.json'
+    playout_channel_json_file = output_dir / 'ofiii_playout-channel.json'
     
     # 頻道ID列表
     channel_ids = [
@@ -234,6 +244,10 @@ def main():
     print("\n🔄 檢查並移除重複頻道...")
     unique_channel_data = remove_duplicate_channels(channel_data)
     
+    # 生成ofiii_playout-channel.json
+    print("\n🔄 生成ofiii_playout-channel.json...")
+    playout_channel_data = generate_playout_channel_json(channel_ids)
+    
     # 寫入M3U文件
     with open(m3u_file, 'w', encoding='utf-8') as f:
         f.write('\n'.join(m3u_content))
@@ -241,6 +255,10 @@ def main():
     # 寫入channel.json文件
     with open(channel_json_file, 'w', encoding='utf-8') as f:
         json.dump(unique_channel_data, f, ensure_ascii=False, indent=2)
+    
+    # 寫入ofiii_playout-channel.json文件
+    with open(playout_channel_json_file, 'w', encoding='utf-8') as f:
+        json.dump(playout_channel_data, f, ensure_ascii=False, indent=2)
     
     print(f"\n🎉 檔案生成完成！")
     print(f"📊 統計資訊:")
@@ -253,6 +271,7 @@ def main():
     print(f"   📁 輸出檔案:")
     print(f"      - {m3u_file}")
     print(f"      - {channel_json_file}")
+    print(f"      - {playout_channel_json_file}")
 
 if __name__ == "__main__":
     main()
